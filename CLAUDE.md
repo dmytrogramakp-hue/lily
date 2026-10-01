@@ -25,24 +25,26 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
 ## n8n workflows (newscatcher.app.n8n.cloud, CatchAll project, folder Sales Automation)
 | Workflow | Id | Role |
 |---|---|---|
-| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status`, `lily-settings`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
+| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status` (create, status, sequence), `lily-campaign-leads`, `lily-settings`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
 | LinkedIn Drip v2 - Message 1 | vlhdApprJVEOwNe7 | Daily 9:00. New connections from the queue get a Claude-written intro. |
 | LinkedIn Drip v2 - Message 2 | muc4p1HwTOQGq6Ib | Daily 9:30. Follow-up with calendar link 3 days later if no reply. |
 | LinkedIn - Send Invites v2 | kUijiwRnqELRkEQt | Hourly 9:05 to 17:05 Madrid. Sends exactly `daily_invite_limit` per day (from `lily_settings`), spread over the remaining runs, max 10 per run, only to `active` campaigns. Marks unreachable and failed leads. |
 | LinkedIn - Withdraw Invites (Lily) | vsdvwNnZUBTCHux7 | Webhook `lily-withdraw` with invitation ids. Withdraws them one by one, 3 to 8 s apart, in the background. Job status in `lily_settings` key `withdraw_job`, surfaced as `jobs.withdraw` in `lily-campaigns`. |
 | LinkedIn - Send Invites (old) | sywANecBVuOg2Bss | Unpublished. Used a revoked Unipile key and ignored campaigns. |
 
-Campaign rules: uploads create campaigns with no status, shown as paused. Only `active` campaigns should be invited. Old rows without `campaign_name` show as "Legacy queue".
+Campaign rules: statuses are draft, active, paused, archived (plus legacy for queue rows with no campaign row). A campaign row with no status shows as draft. Only `active` campaigns are invited. Old rows without `campaign_name` show as "Legacy queue" and cannot run a sequence.
+
+Sequence JSON (column `sequence` in `lily_campaigns`): `{ version: 1, preset, steps: [{ type: "invite", note }, { type: "message", wait_days, mode: "ai" | "template", text }...] }`, max 3 messages. The invite sender renders the invite note per lead (`{{first_name}}`, `{{last_name}}`, `{{company}}`, `{{title}}`), and sends without a note if a used value is missing. Message steps are stored but not yet read by the message workflows, which are off.
 
 ## Screens
 | Route | Data |
 |---|---|
-| `/` | Daily invite limit + weekend switch (`lily-settings`), KPIs and campaigns from `lily-campaigns`, activate / pause via `lily-campaign-status` |
-| `/leads` | CSV upload (papaparse), column auto-mapping, preview, dedupe, posts to `lily-upload` |
-| `/sequences` | Read-only description of the real flow |
-| `/invites` | Unipile received (accept / ignore) and sent (withdraw) invitations. Outgoing tab has bulk withdraw: the server pages all sent invites (100 per page), picks the oldest N, and hands the ids to `lily-withdraw`. |
+| `/` | Daily invite limit + weekend switch, KPIs, campaign list. Rows open the campaign. |
+| `/new-campaign` | Name + preset, creates a draft campaign, opens it |
+| `/campaigns/$name` | Setup checklist, launch / pause / resume / archive. Tabs: Overview (KPIs, funnel, sequence summary), Leads (CSV upload into this campaign, lead table with stage filters and search via `lily-campaign-leads`), Sequence (presets, invite note, message steps) |
+| `/invites` | Unipile received (accept / ignore) and sent (withdraw). Outgoing tab has bulk withdraw. |
 | `/inbox` | Unipile chats, thread view, send reply |
-| `/analytics` | 14-day activity, funnel, per-campaign table from `lily-campaigns` |
+| `/analytics` | 14-day activity, funnel, per-campaign table |
 
 ## Run
 ```

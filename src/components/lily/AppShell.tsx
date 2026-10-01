@@ -4,19 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import { getCampaigns, unwrap } from "@/lib/api";
 import {
   LayoutGrid,
-  Workflow,
+  Plus,
   UserPlus,
   MessagesSquare,
   BarChart3,
-  Upload,
   AlertTriangle,
   Loader2,
 } from "lucide-react";
 
 const nav = [
   { to: "/", label: "Campaigns", icon: LayoutGrid },
-  { to: "/leads", label: "Upload leads", icon: Upload },
-  { to: "/sequences", label: "Sequence", icon: Workflow },
   { to: "/invites", label: "Invites", icon: UserPlus },
   { to: "/inbox", label: "Inbox", icon: MessagesSquare },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
@@ -57,10 +54,10 @@ export function AppShell({
         </div>
         <div className="px-3">
           <Link
-            to="/leads"
+            to="/new-campaign"
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-sidebar-primary px-3 py-2.5 text-sm font-semibold text-sidebar-primary-foreground transition hover:brightness-110"
           >
-            <Upload className="h-4 w-4" /> Upload a list
+            <Plus className="h-4 w-4" /> New campaign
           </Link>
         </div>
         <nav className="mt-6 flex flex-1 flex-col gap-1 px-3">

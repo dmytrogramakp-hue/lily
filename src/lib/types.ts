@@ -1,4 +1,4 @@
-export type CampaignStatus = "active" | "paused" | "archived" | "legacy";
+export type CampaignStatus = "draft" | "active" | "paused" | "archived" | "legacy";
 
 export type Campaign = {
   name: string;
@@ -16,6 +16,7 @@ export type Campaign = {
   created_at: string | null;
   source_file: string | null;
   owner: string | null;
+  sequence: Sequence | null;
 };
 
 export type DailyActivity = {
@@ -107,4 +108,33 @@ export type Invitation = {
   note: string | null;
   at: string | null;
   shared_secret: string | null;
+};
+
+export type SequencePreset = "invite_only" | "invite_message" | "invite_two_messages" | "custom";
+export type InviteStep = { type: "invite"; note: string };
+export type MessageStep = {
+  type: "message";
+  wait_days: number;
+  mode: "ai" | "template";
+  text: string;
+};
+export type SequenceStep = InviteStep | MessageStep;
+export type Sequence = {
+  version: 1;
+  preset: SequencePreset;
+  steps: [InviteStep, ...MessageStep[]];
+};
+
+export type LeadStage =
+  "queued" | "invited" | "connected" | "message_1" | "message_2" | "replied" | "skipped";
+export type CampaignLead = {
+  linkedin_url: string;
+  first_name: string;
+  last_name: string;
+  company: string;
+  title: string;
+  stage: LeadStage;
+  invite_sent_at: string | null;
+  added_at: string | null;
+  note: string;
 };

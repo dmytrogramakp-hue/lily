@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { n8n, unipile } from "./server/clients";
 import type {
+  CampaignLead,
   CampaignSummary,
   ChatMessage,
   ConversationSummary,
@@ -41,11 +42,48 @@ export const getCampaigns = createServerFn({ method: "GET" }).handler(() =>
   }),
 );
 
+const sequenceSchema = z.object({
+  version: z.literal(1).optional(),
+  preset: z.enum(["invite_only", "invite_message", "invite_two_messages", "custom"]),
+  steps: z
+    .array(
+      z.union([
+        z.object({ type: z.literal("invite"), note: z.string().max(300) }),
+        z.object({
+          type: z.literal("message"),
+          wait_days: z.number().int().min(0).max(30),
+          mode: z.enum(["ai", "template"]),
+          text: z.string().max(2000),
+        }),
+      ]),
+    )
+    .min(1)
+    .max(4),
+});
+
+export const updateCampaign = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      name: z.string().trim().min(1).max(120),
+      create: z.boolean().optional(),
+      status: z.enum(["draft", "active", "paused", "archived"]).optional(),
+      sequence: sequenceSchema.optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () => {
+      return n8n<{ ok: boolean; name: string; status?: string }>("lily-campaign-status", {
+        method: "POST",
+        json: data,
+      });
+    }),
+  );
+
 export const setCampaignStatus = createServerFn({ method: "POST" })
   .validator(
     z.object({
       name: z.string().min(1).max(120),
-      status: z.enum(["active", "paused", "archived"]),
+      status: z.enum(["draft", "active", "paused", "archived"]),
     }),
   )
   .handler(({ data }) =>
@@ -54,6 +92,16 @@ export const setCampaignStatus = createServerFn({ method: "POST" })
         method: "POST",
         json: data,
       });
+    }),
+  );
+
+export const getCampaignLeads = createServerFn({ method: "GET" })
+  .validator(z.object({ name: z.string().min(1).max(120) }))
+  .handler(({ data }) =>
+    guard(async () => {
+      return n8n<{ name: string; total: number; leads: CampaignLead[] }>(
+        `lily-campaign-leads?name=${encodeURIComponent(data.name)}`,
+      );
     }),
   );
 

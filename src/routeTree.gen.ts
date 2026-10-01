@@ -13,8 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as InvitesRouteImport } from './routes/invites'
-import { Route as LeadsRouteImport } from './routes/leads'
-import { Route as SequencesRouteImport } from './routes/sequences'
+import { Route as NewCampaignRouteImport } from './routes/new-campaign'
+import { Route as CampaignsNameRouteImport } from './routes/campaigns.$name'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -36,14 +36,14 @@ const InvitesRoute = InvitesRouteImport.update({
   path: '/invites',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LeadsRoute = LeadsRouteImport.update({
-  id: '/leads',
-  path: '/leads',
+const NewCampaignRoute = NewCampaignRouteImport.update({
+  id: '/new-campaign',
+  path: '/new-campaign',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SequencesRoute = SequencesRouteImport.update({
-  id: '/sequences',
-  path: '/sequences',
+const CampaignsNameRoute = CampaignsNameRouteImport.update({
+  id: '/campaigns/$name',
+  path: '/campaigns/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -52,16 +52,16 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
-  '/leads': typeof LeadsRoute
-  '/sequences': typeof SequencesRoute
+  '/new-campaign': typeof NewCampaignRoute
+  '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
-  '/leads': typeof LeadsRoute
-  '/sequences': typeof SequencesRoute
+  '/new-campaign': typeof NewCampaignRoute
+  '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -69,23 +69,34 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
-  '/leads': typeof LeadsRoute
-  '/sequences': typeof SequencesRoute
+  '/new-campaign': typeof NewCampaignRoute
+  '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/analytics' | '/inbox' | '/invites' | '/leads' | '/sequences'
+    | '/'
+    | '/analytics'
+    | '/inbox'
+    | '/invites'
+    | '/new-campaign'
+    | '/campaigns/$name'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analytics' | '/inbox' | '/invites' | '/leads' | '/sequences'
+  to:
+    | '/'
+    | '/analytics'
+    | '/inbox'
+    | '/invites'
+    | '/new-campaign'
+    | '/campaigns/$name'
   id:
     | '__root__'
     | '/'
     | '/analytics'
     | '/inbox'
     | '/invites'
-    | '/leads'
-    | '/sequences'
+    | '/new-campaign'
+    | '/campaigns/$name'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -93,8 +104,8 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   InboxRoute: typeof InboxRoute
   InvitesRoute: typeof InvitesRoute
-  LeadsRoute: typeof LeadsRoute
-  SequencesRoute: typeof SequencesRoute
+  NewCampaignRoute: typeof NewCampaignRoute
+  CampaignsNameRoute: typeof CampaignsNameRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -127,18 +138,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvitesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/leads': {
-      id: '/leads'
-      path: '/leads'
-      fullPath: '/leads'
-      preLoaderRoute: typeof LeadsRouteImport
+    '/new-campaign': {
+      id: '/new-campaign'
+      path: '/new-campaign'
+      fullPath: '/new-campaign'
+      preLoaderRoute: typeof NewCampaignRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sequences': {
-      id: '/sequences'
-      path: '/sequences'
-      fullPath: '/sequences'
-      preLoaderRoute: typeof SequencesRouteImport
+    '/campaigns/$name': {
+      id: '/campaigns/$name'
+      path: '/campaigns/$name'
+      fullPath: '/campaigns/$name'
+      preLoaderRoute: typeof CampaignsNameRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -149,8 +160,8 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   InboxRoute: InboxRoute,
   InvitesRoute: InvitesRoute,
-  LeadsRoute: LeadsRoute,
-  SequencesRoute: SequencesRoute,
+  NewCampaignRoute: NewCampaignRoute,
+  CampaignsNameRoute: CampaignsNameRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

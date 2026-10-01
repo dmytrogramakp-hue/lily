@@ -1,29 +1,29 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ChevronRight,
+  MessageCircle,
   Pause,
-  Play,
+  Plus,
   RefreshCw,
   Send,
   UserCheck,
-  MessageCircle,
-  Upload,
   Users,
 } from "lucide-react";
 import {
   AppShell,
-  Card,
   Btn,
-  StatusPill,
+  Card,
+  EmptyState,
   ErrorBanner,
   Loading,
-  EmptyState,
+  StatusPill,
   timeAgo,
 } from "@/components/lily/AppShell";
-import { getCampaigns, setCampaignStatus, unwrap } from "@/lib/api";
-import type { Campaign } from "@/lib/types";
 import { SendingCard } from "@/components/lily/SendingCard";
+import { getCampaigns, unwrap, updateCampaign } from "@/lib/api";
+import { presetLabel } from "@/lib/sequence";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -36,71 +36,63 @@ export const Route = createFileRoute("/")({
 });
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
-const FILTERS = ["all", "active", "paused", "legacy", "archived"] as const;
+const FILTERS = ["all", "draft", "active", "paused", "legacy", "archived"] as const;
 
 function Campaigns() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const campaigns = useQuery({
     queryKey: ["campaigns"],
     queryFn: () => unwrap(getCampaigns()),
     staleTime: 60_000,
   });
-  const toggle = useMutation({
-    mutationFn: (v: { name: string; status: "active" | "paused" | "archived" }) =>
-      unwrap(setCampaignStatus({ data: v })),
+  const pause = useMutation({
+    mutationFn: (name: string) => unwrap(updateCampaign({ data: { name, status: "paused" } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
   });
 
   const data = campaigns.data;
   const list = useMemo(
-    () => (data?.campaigns ?? []).filter((c) => filter === "all" || c.status === filter),
+    () =>
+      (data?.campaigns ?? []).filter((c) =>
+        filter === "all" ? c.status !== "archived" : c.status === filter,
+      ),
     [data, filter],
   );
   const t = data?.totals;
-
   const kpis = [
     {
       label: "Invites sent",
-      value: t ? t.invited.toLocaleString() : "–",
+      value: t?.invited,
       icon: Send,
       sub: t ? `${t.pending.toLocaleString()} queued in active campaigns` : "",
     },
     {
       label: "Connected",
-      value: t ? t.connected.toLocaleString() : "–",
+      value: t?.connected,
       icon: UserCheck,
       sub: t ? `${pct(t.connected, t.invited)}% of invites` : "",
     },
     {
       label: "Got message 1",
-      value: t ? t.msg1.toLocaleString() : "–",
+      value: t?.msg1,
       icon: Users,
       sub: t ? `${t.msg2.toLocaleString()} got the follow-up` : "",
     },
     {
       label: "Replies",
-      value: t ? t.replied.toLocaleString() : "–",
+      value: t?.replied,
       icon: MessageCircle,
       sub: t ? `${pct(t.replied, t.msg1)}% reply rate` : "",
     },
   ];
-
-  const onToggle = (c: Campaign) => {
-    if (c.status === "active") {
-      toggle.mutate({ name: c.name, status: "paused" });
-      return;
-    }
-    const ok = window.confirm(
-      `Activate "${c.name}"?\n\n${c.pending.toLocaleString()} leads are waiting. Invites go out at your daily limit (${data?.settings.daily_invite_limit ?? 20} a day) while the campaign is active.`,
-    );
-    if (ok) toggle.mutate({ name: c.name, status: "active" });
-  };
+  const open = (name: string) => navigate({ to: "/campaigns/$name", params: { name } });
 
   return (
     <AppShell
       title="Campaigns"
-      subtitle="Every uploaded list is a campaign. New campaigns start paused until you activate them."
+      subtitle="Each campaign has its own leads, sequence and progress. Click one to set it up or track it."
       actions={
         <>
           <Btn
@@ -112,10 +104,10 @@ function Campaigns() {
             Refresh
           </Btn>
           <Link
-            to="/leads"
+            to="/new-campaign"
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground shadow-elegant transition hover:brightness-110"
           >
-            <Upload className="h-4 w-4" /> Upload leads
+            <Plus className="h-4 w-4" /> New campaign
           </Link>
         </>
       }
@@ -125,9 +117,9 @@ function Campaigns() {
           <ErrorBanner error={campaigns.error} />
         </div>
       )}
-      {toggle.error && (
+      {pause.error && (
         <div className="mb-4">
-          <ErrorBanner error={toggle.error} />
+          <ErrorBanner error={pause.error} />
         </div>
       )}
 
@@ -140,7 +132,9 @@ function Campaigns() {
               {k.label}
               <k.icon className="h-4 w-4 text-primary" />
             </div>
-            <div className="mt-3 text-3xl font-bold tracking-tight text-ink">{k.value}</div>
+            <div className="mt-3 text-3xl font-bold tracking-tight text-ink">
+              {k.value?.toLocaleString() ?? "–"}
+            </div>
             <div className="mt-1 text-xs text-muted-foreground">{k.sub}</div>
           </Card>
         ))}
@@ -167,8 +161,11 @@ function Campaigns() {
         {campaigns.isPending ? (
           <Loading label="Reading the invite queue" />
         ) : list.length === 0 ? (
-          <EmptyState title="No campaigns here yet">
-            Upload a CSV of LinkedIn profiles to create your first campaign.
+          <EmptyState title="No campaigns here">
+            <Link to="/new-campaign" className="text-primary underline">
+              Create a campaign
+            </Link>{" "}
+            and add a CSV of LinkedIn profiles.
           </EmptyState>
         ) : (
           <div className="overflow-x-auto">
@@ -177,84 +174,82 @@ function Campaigns() {
                 <tr>
                   <th className="px-5 py-3 font-semibold">Campaign</th>
                   <th className="px-3 py-3 font-semibold">Status</th>
+                  <th className="px-3 py-3 font-semibold">Sequence</th>
                   <th className="px-3 py-3 font-semibold">Leads</th>
                   <th className="px-3 py-3 font-semibold">Progress</th>
                   <th className="px-3 py-3 font-semibold">Queued</th>
-                  <th className="px-3 py-3 font-semibold">Skipped</th>
                   <th className="px-3 py-3 font-semibold">Connected</th>
                   <th className="px-3 py-3 font-semibold">Replies</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {list.map((c) => {
-                  const busy = toggle.isPending && toggle.variables?.name === c.name;
-                  return (
-                    <tr key={c.name} className="border-t transition hover:bg-primary-soft/40">
-                      <td className="px-5 py-4">
-                        <div className="font-semibold text-ink">{c.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {c.source_file ? `${c.source_file} · ` : ""}
-                          {c.created_at
-                            ? `added ${timeAgo(c.created_at)} ago`
-                            : "from the old queue"}
-                          {c.last_invite_at
-                            ? ` · last invite ${timeAgo(c.last_invite_at)} ago`
-                            : ""}
-                        </div>
-                      </td>
-                      <td className="px-3">
-                        <StatusPill status={c.status} />
-                      </td>
-                      <td className="px-3 font-medium">{c.leads.toLocaleString()}</td>
-                      <td className="w-48 px-3">
-                        <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="bg-primary"
-                            style={{ width: `${pct(c.accepted, c.leads)}%` }}
-                          />
-                          <div
-                            className="bg-primary-glow"
-                            style={{ width: `${pct(c.invited - c.accepted, c.leads)}%` }}
-                          />
-                        </div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          {c.invited} invited · {c.accepted} connected
-                        </div>
-                      </td>
-                      <td className="px-3 font-medium">{c.pending.toLocaleString()}</td>
-                      <td
-                        className="px-3 text-muted-foreground"
-                        title="Unreachable profiles or failed invites"
+                {list.map((c) => (
+                  <tr
+                    key={c.name}
+                    onClick={() => open(c.name)}
+                    className="cursor-pointer border-t transition hover:bg-primary-soft/40"
+                  >
+                    <td className="px-5 py-4">
+                      <Link
+                        to="/campaigns/$name"
+                        params={{ name: c.name }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-semibold text-ink hover:text-primary"
                       >
-                        {c.excluded.toLocaleString()}
-                      </td>
-                      <td className="px-3 font-semibold">
-                        {c.accepted ? `${pct(c.accepted, c.invited)}%` : "–"}
-                      </td>
-                      <td className="px-3 font-semibold text-primary">{c.replied}</td>
-                      <td className="px-4 text-right">
-                        {c.status !== "archived" && (
+                        {c.name}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {c.created_at
+                          ? `created ${timeAgo(c.created_at)} ago`
+                          : "from the old queue"}
+                        {c.last_invite_at ? ` · last invite ${timeAgo(c.last_invite_at)} ago` : ""}
+                      </div>
+                    </td>
+                    <td className="px-3">
+                      <StatusPill status={c.status} />
+                    </td>
+                    <td className="px-3 text-xs text-muted-foreground">
+                      {presetLabel(c.sequence)}
+                    </td>
+                    <td className="px-3 font-medium">{c.leads.toLocaleString()}</td>
+                    <td className="w-44 px-3">
+                      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="bg-primary"
+                          style={{ width: `${pct(c.accepted, c.leads)}%` }}
+                        />
+                        <div
+                          className="bg-primary-glow"
+                          style={{ width: `${pct(c.invited - c.accepted, c.leads)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {c.invited} invited · {c.accepted} connected
+                      </div>
+                    </td>
+                    <td className="px-3 font-medium">{c.pending.toLocaleString()}</td>
+                    <td className="px-3 font-semibold">
+                      {c.invited ? `${pct(c.accepted, c.invited)}%` : "–"}
+                    </td>
+                    <td className="px-3 font-semibold text-primary">{c.replied}</td>
+                    <td className="px-4 text-right">
+                      {c.status === "active" ? (
+                        <div className="inline-block" onClick={(e) => e.stopPropagation()}>
                           <Btn
-                            variant={c.status === "active" ? "outline" : "primary"}
-                            onClick={() => onToggle(c)}
-                            disabled={busy}
+                            variant="outline"
+                            onClick={() => pause.mutate(c.name)}
+                            disabled={pause.isPending && pause.variables === c.name}
                           >
-                            {c.status === "active" ? (
-                              <>
-                                <Pause className="h-4 w-4" /> Pause
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4" /> Activate
-                              </>
-                            )}
+                            <Pause className="h-4 w-4" /> Pause
                           </Btn>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </div>
+                      ) : (
+                        <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
