@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as InvitesRouteImport } from './routes/invites'
+import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as SequencesRouteImport } from './routes/sequences'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const InvitesRoute = InvitesRouteImport.update({
   path: '/invites',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeadsRoute = LeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SequencesRoute = SequencesRouteImport.update({
   id: '/sequences',
   path: '/sequences',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
+  '/leads': typeof LeadsRoute
   '/sequences': typeof SequencesRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
+  '/leads': typeof LeadsRoute
   '/sequences': typeof SequencesRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,23 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
+  '/leads': typeof LeadsRoute
   '/sequences': typeof SequencesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/analytics' | '/inbox' | '/invites' | '/sequences'
+  fullPaths:
+    '/' | '/analytics' | '/inbox' | '/invites' | '/leads' | '/sequences'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analytics' | '/inbox' | '/invites' | '/sequences'
-  id: '__root__' | '/' | '/analytics' | '/inbox' | '/invites' | '/sequences'
+  to: '/' | '/analytics' | '/inbox' | '/invites' | '/leads' | '/sequences'
+  id:
+    | '__root__'
+    | '/'
+    | '/analytics'
+    | '/inbox'
+    | '/invites'
+    | '/leads'
+    | '/sequences'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +93,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   InboxRoute: typeof InboxRoute
   InvitesRoute: typeof InvitesRoute
+  LeadsRoute: typeof LeadsRoute
   SequencesRoute: typeof SequencesRoute
 }
 
@@ -109,6 +127,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvitesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leads': {
+      id: '/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof LeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sequences': {
       id: '/sequences'
       path: '/sequences'
@@ -124,6 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   InboxRoute: InboxRoute,
   InvitesRoute: InvitesRoute,
+  LeadsRoute: LeadsRoute,
   SequencesRoute: SequencesRoute,
 }
 export const routeTree = rootRouteImport

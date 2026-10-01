@@ -1,123 +1,156 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Eye, UserPlus, MessageSquare, Clock, GitBranch, ThumbsUp, Award, UserRoundPlus, Plus, Save, Rocket, Trash2 } from "lucide-react";
-import { AppShell, Card, Btn } from "@/components/lily/AppShell";
-import { sequence as initial, type Step, type StepType } from "@/lib/mock";
+import {
+  Clock,
+  MessageSquare,
+  Sparkles,
+  StopCircle,
+  Upload,
+  UserPlus,
+  type LucideIcon,
+} from "lucide-react";
+import { AppShell, Card } from "@/components/lily/AppShell";
 
 export const Route = createFileRoute("/sequences")({
   head: () => ({
     meta: [
-      { title: "Sequence builder — Lily" },
-      { name: "description", content: "Build LinkedIn outreach sequences: invites, messages, delays and conditions." },
-      { property: "og:title", content: "Sequence builder — Lily" },
-      { property: "og:description", content: "Build LinkedIn outreach sequences: invites, messages, delays and conditions." },
+      { title: "Sequence · Lily" },
+      { name: "description", content: "How Lily works a lead from upload to reply." },
     ],
   }),
-  component: Sequences,
+  component: Sequence,
 });
 
-const meta: Record<StepType, { icon: typeof Eye; label: string; tone: string }> = {
-  view: { icon: Eye, label: "View profile", tone: "bg-primary-soft text-primary" },
-  follow: { icon: UserRoundPlus, label: "Follow", tone: "bg-primary-soft text-primary" },
-  like: { icon: ThumbsUp, label: "Like post", tone: "bg-primary-soft text-primary" },
-  endorse: { icon: Award, label: "Endorse skill", tone: "bg-primary-soft text-primary" },
-  invite: { icon: UserPlus, label: "Connection invite", tone: "bg-primary text-primary-foreground" },
-  message: { icon: MessageSquare, label: "Message", tone: "bg-ink text-ink-foreground" },
-  delay: { icon: Clock, label: "Delay", tone: "bg-muted text-muted-foreground" },
-  condition: { icon: GitBranch, label: "Condition", tone: "bg-warning-soft text-warning" },
-};
+type Step = { icon: LucideIcon; tone: string; title: string; when: string; detail: string };
 
-function Sequences() {
-  const [steps, setSteps] = useState<Step[]>(initial);
-  const [selected, setSelected] = useState<string>("s4");
-  const sel = steps.find((s) => s.id === selected);
-  const main = steps.filter((s) => !s.branch);
-  const yes = steps.filter((s) => s.branch === "yes");
-  const no = steps.filter((s) => s.branch === "no");
+const steps: Step[] = [
+  {
+    icon: Upload,
+    tone: "bg-muted text-muted-foreground",
+    title: "Lead uploaded",
+    when: "You",
+    detail:
+      "CSV goes into the invite queue under a campaign. Duplicates of anyone already in the queue are skipped.",
+  },
+  {
+    icon: UserPlus,
+    tone: "bg-primary text-primary-foreground",
+    title: "Connection invite",
+    when: "Weekdays 9:00 to 17:00, 4 per run, about 20 a day",
+    detail:
+      "Only leads in active campaigns. No note, so the invite looks like a normal request. Profiles LinkedIn will not resolve are skipped and marked, so the queue never stalls.",
+  },
+  {
+    icon: Clock,
+    tone: "bg-muted text-muted-foreground",
+    title: "Wait for acceptance",
+    when: "Up to 14 days",
+    detail:
+      "Lily checks your new connections every morning and only messages people you invited through a campaign.",
+  },
+  {
+    icon: MessageSquare,
+    tone: "bg-ink text-ink-foreground",
+    title: "Message 1",
+    when: "Daily at 9:00, after they accept",
+    detail:
+      "Claude reads their title, company and headline, picks the closest vertical, and writes a short note on what NewsCatcher normally finds for teams like theirs. Ends with one small question.",
+  },
+  {
+    icon: Clock,
+    tone: "bg-muted text-muted-foreground",
+    title: "Wait 3 days",
+    when: "Skipped if they reply",
+    detail: "If they write back, the sequence stops and the conversation is yours in the inbox.",
+  },
+  {
+    icon: MessageSquare,
+    tone: "bg-ink text-ink-foreground",
+    title: "Message 2",
+    when: "Daily at 9:30",
+    detail:
+      "A shorter follow-up with a different angle and your calendar link. Nothing after this.",
+  },
+  {
+    icon: StopCircle,
+    tone: "bg-success-soft text-success",
+    title: "Done",
+    when: "",
+    detail:
+      "Replies are flagged in the inbox. No further automated messages are sent to this person.",
+  },
+];
 
-  const add = (type: StepType) => {
-    const id = `n${Date.now()}`;
-    setSteps((s) => [...s, { id, type, title: meta[type].label, detail: "Configure this step", branch: "yes" }]);
-    setSelected(id);
-  };
-  const update = (patch: Partial<Step>) => setSteps((s) => s.map((x) => (x.id === selected ? { ...x, ...patch } : x)));
+const verticals = [
+  "Supply chain and procurement",
+  "Fintech and financial regulation",
+  "KYC, AML and financial crime",
+  "Insurance",
+  "PR and communications",
+  "ESG and sustainability",
+  "Cybersecurity and third-party risk",
+  "Investment and market intelligence",
+  "Data, AI and product teams",
+  "General",
+];
 
-  const Node = ({ s }: { s: Step }) => {
-    const m = meta[s.type];
-    return (
-      <button onClick={() => setSelected(s.id)} className={`w-72 rounded-xl border bg-card p-3 text-left shadow-card transition hover:-translate-y-0.5 ${selected === s.id ? "ring-2 ring-primary" : ""}`}>
-        <div className="flex items-center gap-3">
-          <div className={`grid h-9 w-9 place-items-center rounded-lg ${m.tone}`}><m.icon className="h-4 w-4" /></div>
-          <div className="min-w-0"><div className="text-sm font-semibold text-ink">{s.title}</div><div className="truncate text-xs text-muted-foreground">{s.detail}</div></div>
-        </div>
-      </button>
-    );
-  };
-  const Line = () => <div className="mx-auto h-6 w-px bg-border" />;
-
+function Sequence() {
   return (
-    <AppShell title="Sequence builder" subtitle="Fintech Heads of Data — EU" actions={<><Btn variant="outline"><Save className="h-4 w-4" /> Save draft</Btn><Btn><Rocket className="h-4 w-4" /> Launch</Btn></>}>
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr_320px]">
-        <Card className="h-fit p-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add step</div>
-          <div className="flex flex-col gap-1.5">
-            {(Object.keys(meta) as StepType[]).map((t) => {
-              const m = meta[t];
-              return (
-                <button key={t} onClick={() => add(t)} className="flex items-center gap-2.5 rounded-lg border border-dashed px-2.5 py-2 text-sm font-medium hover:border-primary hover:bg-primary-soft">
-                  <span className={`grid h-7 w-7 place-items-center rounded-md ${m.tone}`}><m.icon className="h-3.5 w-3.5" /></span>{m.label}
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card className="bg-dots overflow-x-auto p-8">
-          <div className="flex flex-col items-center">
-            <div className="rounded-full bg-ink px-4 py-1.5 text-xs font-semibold text-ink-foreground">Start · 842 leads</div>
-            {main.map((s) => (<div key={s.id} className="flex flex-col items-center"><Line /><Node s={s} /></div>))}
-            <Line />
-            <div className="grid grid-cols-2 gap-10">
-              {[{ label: "Yes", list: yes, tone: "bg-success-soft text-success" }, { label: "No", list: no, tone: "bg-destructive-soft text-destructive" }].map((b) => (
-                <div key={b.label} className="flex flex-col items-center">
-                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${b.tone}`}>{b.label}</span>
-                  {b.list.map((s) => (<div key={s.id} className="flex flex-col items-center"><Line /><Node s={s} /></div>))}
-                  <Line />
-                  <button onClick={() => add("message")} className="grid h-8 w-8 place-items-center rounded-full border-2 border-dashed text-muted-foreground hover:border-primary hover:text-primary"><Plus className="h-4 w-4" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        <Card className="h-fit p-5">
-          {sel ? (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{meta[sel.type].label}</div>
-                <button onClick={() => setSteps((s) => s.filter((x) => x.id !== sel.id))} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
-              </div>
-              <label className="mt-4 block text-xs font-semibold">Step name</label>
-              <input value={sel.title} onChange={(e) => update({ title: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
-              <label className="mt-4 block text-xs font-semibold">{sel.type === "message" || sel.type === "invite" ? "Message" : "Settings"}</label>
-              <textarea value={sel.detail} onChange={(e) => update({ detail: e.target.value })} rows={6} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
-              {(sel.type === "message" || sel.type === "invite") && (
-                <>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {["{{first_name}}", "{{company}}", "{{title}}", "{{recent_news}}"].map((v) => (
-                      <button key={v} onClick={() => update({ detail: sel.detail + " " + v })} className="rounded-md bg-primary-soft px-2 py-0.5 font-mono text-[11px] text-primary">{v}</button>
-                    ))}
+    <AppShell
+      title="Sequence"
+      subtitle="What happens to every lead, in order. The same sequence runs for all campaigns."
+    >
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <Card className="bg-dots p-8">
+          <div className="mx-auto flex max-w-xl flex-col">
+            {steps.map((s, i) => (
+              <div key={s.title} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${s.tone}`}
+                  >
+                    <s.icon className="h-4 w-4" />
                   </div>
-                  <div className="mt-4 rounded-xl bg-primary-soft p-3 text-xs text-accent-foreground"><b>Lily AI:</b> Personalise with the lead's latest company news from NewsCatcher. <button className="font-semibold underline">Generate</button></div>
-                  {sel.type === "invite" && <div className="mt-2 text-right text-[11px] text-muted-foreground">{sel.detail.length}/300</div>}
-                </>
-              )}
-              {sel.type === "delay" && (
-                <div className="mt-4 flex gap-2"><input defaultValue={1} type="number" className="w-20 rounded-lg border px-3 py-2 text-sm" /><select className="flex-1 rounded-lg border px-3 py-2 text-sm"><option>days</option><option>hours</option></select></div>
-              )}
-            </>
-          ) : <div className="text-sm text-muted-foreground">Select a step to edit it.</div>}
+                  {i < steps.length - 1 && <div className="w-px flex-1 bg-border" />}
+                </div>
+                <div className="pb-6">
+                  <div className="rounded-xl border bg-card p-4 shadow-card">
+                    <div className="font-semibold text-ink">{s.title}</div>
+                    {s.when && (
+                      <div className="mt-0.5 text-xs font-medium text-primary">{s.when}</div>
+                    )}
+                    <div className="mt-2 text-sm text-muted-foreground">{s.detail}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
+
+        <div className="space-y-6">
+          <Card className="p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <Sparkles className="h-4 w-4 text-primary" /> How messages are written
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              No templates. Each message is written for the person, then checked before sending: no
+              dashes, no exclamation marks, under the length limit, starts with their first name.
+              Anything that fails is held back and emailed to you.
+            </p>
+          </Card>
+          <Card className="p-5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Verticals Lily picks from
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {verticals.map((v) => (
+                <li key={v} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  {v}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
       </div>
     </AppShell>
   );

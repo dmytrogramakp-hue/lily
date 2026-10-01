@@ -1,25 +1,50 @@
-# Lily — NewsCatcher LI Agent (design handoff)
+# Lily — NewsCatcher LinkedIn outreach
 
-This repo is a **UI prototype** of a LinkedIn outreach tool (Dripify-style) for sales teams.
-All data is mock (`src/lib/mock.ts`). Your job: keep the design, wire the backend.
+Internal tool for Dima's LinkedIn outreach. Upload a list, it becomes a campaign, n8n sends invites and two AI-written messages, replies land in the inbox.
 
 ## Stack
-- TanStack Start v1 (React 19, file routes in `src/routes/`), Vite, Tailwind v4.
-- Design tokens live in `src/styles.css` (oklch). Use semantic classes (`bg-primary`, `text-ink`, `bg-primary-soft`, `shadow-card`, `bg-gradient-ink`) — never hardcode colours.
-- Brand: NewsCatcher royal blue `#183FD9` (primary), navy `#04006B` (ink / sidebar), light `#74A0FE` (primary-glow), bg `#F6F8FB`. Font: PP Neue Montreal + PP Neue Montreal Mono, loaded locally from `public/fonts` via @font-face. Never use Google Fonts.
-- Shared UI: `src/components/lily/AppShell.tsx` (sidebar layout, Card, Btn, Avatar, StatusPill).
+- TanStack Start v1 (React 19, file routes in `src/routes/`), Vite, Tailwind v4. Started from a Lovable prototype.
+- Design tokens in `src/styles.css` (oklch). Use semantic classes (`bg-primary`, `text-ink`, `bg-primary-soft`, `shadow-card`). Never hardcode colours.
+- Brand: NewsCatcher royal blue `#183FD9`, navy `#04006B`, light `#74A0FE`, bg `#F6F8FB`. Font: PP Neue Montreal + PP Neue Montreal Mono, local `@font-face` from `public/fonts`. Never Google Fonts.
+- Shared UI: `src/components/lily/AppShell.tsx`.
+
+## Architecture
+```
+Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, invites, send message)
+                                    └──▶ n8n "Lily - API"     (upload leads, campaign stats, campaign status)
+                                              │
+                                              ├─ Google Sheet "LI Invites Only" / tab "Invite Queue"   (all leads)
+                                              ├─ Google Sheet tracker / tab "LinkedIn Outreach Tracker" (messages, replies)
+                                              └─ n8n data table "lily_campaigns"                        (campaign status)
+```
+- Server functions never throw across the boundary. They return `Result<T>`; the client calls `unwrap()`. Thrown errors from server fns did not reach the client in this TanStack version.
+- All keys stay server-side. `src/lib/server/env.ts` reads `.env.local` in dev because Vite does not expose non-`VITE_` vars to `process.env`.
+- `src/server.ts` enforces HTTP basic auth on every request (pages and server fns). In production it refuses to serve if the password is not set.
+
+## n8n workflows (newscatcher.app.n8n.cloud, CatchAll project, folder Sales Automation)
+| Workflow | Id | Role |
+|---|---|---|
+| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
+| LinkedIn Drip v2 - Message 1 | vlhdApprJVEOwNe7 | Daily 9:00. New connections from the queue get a Claude-written intro. |
+| LinkedIn Drip v2 - Message 2 | muc4p1HwTOQGq6Ib | Daily 9:30. Follow-up with calendar link 3 days later if no reply. |
+| LinkedIn - Send Invites (old) | sywANecBVuOg2Bss | Uses a revoked Unipile key and ignores campaigns. To be replaced by a campaign-aware sender that reads `lily_campaigns`. |
+
+Campaign rules: uploads create campaigns with no status, shown as paused. Only `active` campaigns should be invited. Old rows without `campaign_name` show as "Legacy queue".
 
 ## Screens
-| Route | Purpose | Backend needed |
-|---|---|---|
-| `/` | Campaigns list + KPIs, pause/resume | campaigns CRUD, stats |
-| `/sequences` | Sequence builder: view, like, invite, message, delay, condition (yes/no branches), follow, endorse | save sequence JSON, launch → n8n workflow |
-| `/invites` | Incoming: accept / ignore / accept all. Outgoing: withdraw | Unipile invitations API |
-| `/inbox` | Unified team inbox, send message, AI reply chips, lead stage | Unipile chats/messages, webhooks for new messages |
-| `/analytics` | Weekly activity, funnel, team leaderboard | aggregated events |
+| Route | Data |
+|---|---|
+| `/` | Campaigns + KPIs from `lily-campaigns`; activate / pause via `lily-campaign-status` |
+| `/leads` | CSV upload (papaparse), column auto-mapping, preview, dedupe, posts to `lily-upload` |
+| `/sequences` | Read-only description of the real flow |
+| `/invites` | Unipile received (accept / ignore) and sent (withdraw) invitations |
+| `/inbox` | Unipile chats, thread view, send reply |
+| `/analytics` | 14-day activity, funnel, per-campaign table from `lily-campaigns` |
 
-## Intended backend
-- **Unipile API** for LinkedIn actions (invites, messages, profile views, chats). Keep the API key server-side only.
-- **n8n** runs sequences: each step type maps to an n8n node; respect daily limits (sidebar shows invites/day) and working hours.
-- Multi-user sales team: each rep connects their own LinkedIn account; managers see "All team".
-- Variables in messages: `{{first_name}}`, `{{company}}`, `{{title}}`, `{{recent_news}}` (from NewsCatcher API).
+## Run
+```
+cp .env.example .env.local   # fill in values
+npm install
+npm run dev -- --port 5174
+```
+Deploy: Vercel auto-detects the host at build time (nitro). Set the env vars from `.env.example` in the project settings.

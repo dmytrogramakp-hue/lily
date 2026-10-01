@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { env as readEnv } from "./lib/server/env";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -44,8 +45,48 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// Basic auth for the whole app (pages and server functions). The app reads and sends
+// LinkedIn messages, so it must never be reachable without a password.
+function timingSafeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function checkAuth(request: Request): Promise<Response | null> {
+  const user = await readEnv("LILY_BASIC_USER");
+  const password = await readEnv("LILY_BASIC_PASSWORD");
+  if (!user || !password) {
+    if (process.env["NODE_ENV"] === "production") {
+      return new Response("Lily is not configured: set LILY_BASIC_USER and LILY_BASIC_PASSWORD.", {
+        status: 503,
+      });
+    }
+    return null;
+  }
+  const header = request.headers.get("authorization") ?? "";
+  if (header.startsWith("Basic ")) {
+    try {
+      const [u, ...rest] = atob(header.slice(6)).split(":");
+      if (timingSafeEqual(u ?? "", user) && timingSafeEqual(rest.join(":"), password)) return null;
+    } catch {
+      // fall through to challenge
+    }
+  }
+  return new Response("Authentication required.", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": 'Basic realm="Lily", charset="UTF-8"',
+      "cache-control": "no-store",
+    },
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const denied = await checkAuth(request);
+    if (denied) return denied;
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
