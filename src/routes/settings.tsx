@@ -34,21 +34,31 @@ function Settings() {
   const saved = summary.data?.settings;
   const [model, setModel] = useState<AiModel>("claude-sonnet-5");
   const [context, setContext] = useState("");
+  const [offer, setOffer] = useState("");
 
   useEffect(() => {
     if (!saved) return;
     setModel(saved.ai_model);
     setContext(saved.company_context);
-  }, [saved?.ai_model, saved?.company_context]); // eslint-disable-line react-hooks/exhaustive-deps
+    setOffer(saved.offer);
+  }, [saved?.ai_model, saved?.company_context, saved?.offer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const test = useMutation({ mutationFn: () => unwrap(testClaude()) });
   const save = useMutation({
     mutationFn: () =>
-      unwrap(setSendingSettings({ data: { ai_model: model, company_context: context.trim() } })),
+      unwrap(
+        setSendingSettings({
+          data: { ai_model: model, company_context: context.trim(), offer: offer.trim() },
+        }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
   });
 
-  const dirty = !!saved && (saved.ai_model !== model || saved.company_context !== context.trim());
+  const dirty =
+    !!saved &&
+    (saved.ai_model !== model ||
+      saved.company_context !== context.trim() ||
+      saved.offer !== offer.trim());
 
   return (
     <AppShell
@@ -81,6 +91,25 @@ function Settings() {
               />
               <div className="mt-1 text-right text-[11px] text-muted-foreground">
                 {context.length}/4000
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="font-semibold text-ink">Current offer</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                The deal you are running right now. AI messages mention it and close by offering to
+                send the trial link. Connection notes never mention it. Update this when the offer
+                changes.
+              </p>
+              <textarea
+                value={offer}
+                onChange={(e) => setOffer(e.target.value)}
+                rows={5}
+                maxLength={1500}
+                className="mt-4 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
+              />
+              <div className="mt-1 text-right text-[11px] text-muted-foreground">
+                {offer.length}/1500
               </div>
             </Card>
           </div>

@@ -67,6 +67,7 @@ export type SendingSettings = {
   daily_invite_limit: number;
   send_weekends: boolean;
   company_context: string;
+  offer: string;
   ai_model: AiModel;
 };
 

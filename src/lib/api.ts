@@ -112,6 +112,7 @@ export const setSendingSettings = createServerFn({ method: "POST" })
       daily_invite_limit: z.number().int().min(0).max(100).optional(),
       send_weekends: z.boolean().optional(),
       company_context: z.string().max(4000).optional(),
+      offer: z.string().max(1500).optional(),
       ai_model: z.enum(["claude-sonnet-5", "claude-opus-5"]).optional(),
     }),
   )
