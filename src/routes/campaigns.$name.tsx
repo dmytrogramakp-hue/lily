@@ -30,6 +30,7 @@ import { SequenceEditor } from "@/components/lily/SequenceEditor";
 import { getCampaignLeads, getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { describeSequence, presetLabel } from "@/lib/sequence";
 import type { Campaign, CampaignLead, LeadStage } from "@/lib/types";
+import { useCurrentUser, useTeam } from "@/lib/current-user";
 
 export const Route = createFileRoute("/campaigns/$name")({
   head: ({ params }) => ({ meta: [{ title: `${params.name} · Lily` }] }),
@@ -169,6 +170,7 @@ function CampaignPage() {
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <StatusPill status={c.status} />
+        {!isLegacyQueue && <OwnerControl campaign={c} />}
         {c.status === "active" && (
           <span className="text-xs text-muted-foreground">
             Sending {limit} invites a day{etaDays ? `, about ${etaDays} sending days left` : ""}
@@ -223,6 +225,60 @@ function CampaignPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+/** Owner dropdown plus an "Assign to me" shortcut. Anyone on the team can reassign. */
+function OwnerControl({ campaign: c }: { campaign: Campaign }) {
+  const qc = useQueryClient();
+  const { user } = useCurrentUser();
+  const { members, byKey } = useTeam();
+  const assign = useMutation({
+    mutationFn: (owner: string) => unwrap(updateCampaign({ data: { name: c.name, owner } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
+  });
+  const current = c.owner ? byKey.get(c.owner) : undefined;
+  // Keep a removed owner visible in the list so the select still shows who owns it.
+  const options = current && !current.active ? [...members, current] : members;
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="h-4 w-px bg-border" />
+      <label htmlFor="owner" className="font-medium">
+        Owner
+      </label>
+      <select
+        id="owner"
+        value={c.owner ?? ""}
+        disabled={assign.isPending}
+        onChange={(e) => assign.mutate(e.target.value)}
+        className="rounded-lg border bg-card px-2 py-1 text-xs font-semibold text-ink"
+      >
+        <option value="">Unassigned</option>
+        {options.map((m) => (
+          <option key={m.key} value={m.key}>
+            {m.name}
+            {m.active ? "" : " (left team)"}
+          </option>
+        ))}
+        {c.owner && !current && <option value={c.owner}>{c.owner}</option>}
+      </select>
+      {user && c.owner !== user.key && (
+        <button
+          type="button"
+          onClick={() => assign.mutate(user.key)}
+          disabled={assign.isPending}
+          className="font-semibold text-primary hover:underline disabled:opacity-50"
+        >
+          Assign to me
+        </button>
+      )}
+      {assign.isPending && <span>Saving</span>}
+      {assign.error && (
+        <span className="text-destructive">
+          {assign.error instanceof Error ? assign.error.message : "Could not save"}
+        </span>
+      )}
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@ export type Campaign = {
   last_invite_at: string | null;
   created_at: string | null;
   source_file: string | null;
+  /** Team member key, or null when nobody owns the campaign. */
   owner: string | null;
   sequence: Sequence | null;
 };
@@ -46,8 +47,19 @@ export type CampaignSummary = {
   };
   daily: DailyActivity[];
   settings: SendingSettings;
+  /** Everyone who can be picked as "who is using Lily" and assigned as a campaign owner. */
+  users?: TeamMember[];
   today: { date: string; invites_sent: number; messages_sent?: number };
   jobs?: { withdraw: WithdrawJob | null };
+};
+
+export type TeamMember = {
+  /** Stable id stored as the campaign owner, e.g. "dima". */
+  key: string;
+  name: string;
+  role: string;
+  email: string;
+  active: boolean;
 };
 
 export type WithdrawJob = {

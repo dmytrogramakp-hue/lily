@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
 import { AppShell, Btn, Card, ErrorBanner, Loading } from "@/components/lily/AppShell";
+import { TeamCard } from "@/components/lily/TeamCard";
 import { getCampaigns, setSendingSettings, testClaude, unwrap } from "@/lib/api";
 import type { AiModel } from "@/lib/types";
 
@@ -63,7 +64,7 @@ function Settings() {
   return (
     <AppShell
       title="Settings"
-      subtitle="How Lily connects to Claude and what it says about NewsCatcher."
+      subtitle="Your team, how Lily connects to Claude, and what it says about NewsCatcher."
     >
       {summary.error && <ErrorBanner error={summary.error} />}
       {summary.isPending ? (
@@ -73,6 +74,7 @@ function Settings() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">
+            <TeamCard campaigns={summary.data?.campaigns ?? []} />
             <Card className="p-6">
               <div className="flex items-center gap-2 font-semibold text-ink">
                 <Bot className="h-4 w-4 text-primary" /> What NewsCatcher does

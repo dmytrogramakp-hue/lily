@@ -17,7 +17,8 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
                                               ├─ Google Sheet tracker / tab "LinkedIn Outreach Tracker" (messages, replies)
                                               ├─ n8n data table "lily_campaigns"                        (campaign status)
                                               ├─ n8n data table "lily_settings"                         (daily_invite_limit, send_weekends)
-                                              └─ n8n data table "lily_lead_progress"                    (per lead: accepted, messages sent, replies)
+                                              ├─ n8n data table "lily_lead_progress"                    (per lead: accepted, messages sent, replies)
+                                              └─ n8n data table "lily_users"                            (team: key, name, role, email, active)
 ```
 - Server functions never throw across the boundary. They return `Result<T>`; the client calls `unwrap()`. Thrown errors from server fns did not reach the client in this TanStack version.
 - All keys stay server-side. `src/lib/server/env.ts` reads `.env.local` in dev because Vite does not expose non-`VITE_` vars to `process.env`.
@@ -33,6 +34,8 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
 | LinkedIn - Withdraw Invites (Lily) | vsdvwNnZUBTCHux7 | Webhook `lily-withdraw` with invitation ids. Withdraws them one by one, 3 to 8 s apart, in the background. Job status in `lily_settings` key `withdraw_job`, surfaced as `jobs.withdraw` in `lily-campaigns`. |
 | Lily - AI Writer | 2sG66FCH2lVpMpPm | Webhook `lily-generate`. The single Claude entry point (Anthropic node, shared n8n credential, model and company context from `lily_settings`). Modes: `message` (analyses a compact LinkedIn profile and writes, returns analysis + text + tone issues), `template` (generic text with placeholders from an audience sample), `ping`. Also callable as a sub-workflow (trigger "Called By Workflow", same body as the webhook), which is how Campaign Messages uses it, so previews match what is sent. |
 | LinkedIn - Send Invites (old) | sywANecBVuOg2Bss | Unpublished. Used a revoked Unipile key and ignored campaigns. |
+
+Team: one shared basic-auth login. `lily_users` (AoI7lJBoTqXNm7fb) lists team members; `lily-campaigns` returns them as `users`. Each browser picks "who is using Lily" (`src/lib/current-user.ts`, localStorage, auto-picked when there is one member). That person is the default owner of new campaigns and drives the "Mine" filter and "Assign to me". It is not access control: anyone can manage any campaign. Campaign `owner` in `lily_campaigns` is a team member key (lowercase; old rows said "Dima", read as `dima`). Team save/remove goes through `lily-settings` with `{ user_action: "save" | "remove", user }` (no separate webhook, so no extra copy of the shared secret); removing sets `active=false` and keeps campaigns, shown as "left team". All campaigns still send from Dima's LinkedIn account and AI messages are signed as Dima.
 
 Campaign rules: statuses are draft, active, paused, archived (plus legacy for queue rows with no campaign row). A campaign row with no status shows as draft. Only `active` campaigns are invited. Old rows without `campaign_name` show as "Legacy queue" and cannot run a sequence.
 

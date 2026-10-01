@@ -1,8 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCampaigns, unwrap } from "@/lib/api";
+import { useCurrentUser, useTeam } from "@/lib/current-user";
+import type { TeamMember } from "@/lib/types";
 import {
+  Check,
+  ChevronDown,
   LayoutGrid,
   Plus,
   UserPlus,
@@ -99,7 +103,7 @@ export function AppShell({
                 : `${activeCount} active campaign${activeCount > 1 ? "s" : ""} · 9:00 to 17:00${weekends ? ", every day" : ", weekdays"}`}
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="h-2 w-2 rounded-full bg-success" /> Dima Grama · LinkedIn via Unipile
+            <span className="h-2 w-2 rounded-full bg-success" /> Sending from Dima's LinkedIn
           </div>
         </Link>
       </aside>
@@ -107,14 +111,8 @@ export function AppShell({
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center gap-4 border-b bg-card/80 px-8 py-3 backdrop-blur">
           <div className="text-sm text-muted-foreground">NewsCatcher LinkedIn outreach</div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="text-right leading-tight">
-              <div className="text-sm font-semibold text-ink">Dima Grama</div>
-              <div className="text-[11px] text-muted-foreground">Account Executive</div>
-            </div>
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-primary-soft text-xs font-bold text-primary">
-              DG
-            </div>
+          <div className="ml-auto">
+            <UserSwitcher />
           </div>
         </header>
         <div className="flex items-end justify-between gap-4 px-8 pb-6 pt-8">
@@ -126,7 +124,151 @@ export function AppShell({
         </div>
         <div className="flex-1 px-8 pb-10">{children}</div>
       </main>
+      <WhoIsUsingLily />
     </div>
+  );
+}
+
+/** Header control: who is using Lily in this browser, with a menu to switch. */
+function UserSwitcher() {
+  const { user, setUser } = useCurrentUser();
+  const { members } = useTeam();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  // No user yet: the first-visit picker covers the screen, so there is nothing to show here.
+  if (!user) return null;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-3 rounded-xl px-2 py-1 transition hover:bg-muted"
+      >
+        <div className="text-right leading-tight">
+          <div className="text-sm font-semibold text-ink">{user.name}</div>
+          <div className="text-[11px] text-muted-foreground">{user.role || "Team member"}</div>
+        </div>
+        <Avatar initials={initialsOf(user.name)} size="sm" />
+        {members.length > 1 && <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open && members.length > 1 && (
+        <div
+          role="menu"
+          className="absolute right-0 z-30 mt-2 w-64 rounded-xl border bg-card p-1.5 shadow-card"
+        >
+          <div className="px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Switch person
+          </div>
+          {members.map((m) => (
+            <button
+              key={m.key}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setUser(m.key);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted"
+            >
+              <Avatar initials={initialsOf(m.name)} size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-ink">{m.name}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">{m.role}</span>
+              </span>
+              {m.key === user.key && <Check className="h-4 w-4 text-primary" />}
+            </button>
+          ))}
+          <Link
+            to="/settings"
+            onClick={() => setOpen(false)}
+            className="mt-1 block border-t px-2.5 pb-1 pt-2 text-xs font-medium text-primary hover:underline"
+          >
+            Manage team
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** First-visit picker. Shown only when the team has more than one person and none is chosen. */
+function WhoIsUsingLily() {
+  const { needsChoice, setUser } = useCurrentUser();
+  const { members } = useTeam();
+  if (!needsChoice) return null;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="who-title"
+        className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-card"
+      >
+        <h2 id="who-title" className="text-lg font-bold text-ink">
+          Who is using Lily?
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Lily remembers this on this browser. It sets the owner of the campaigns you create and
+          your "Mine" filter. You can switch any time from the top right.
+        </p>
+        <div className="mt-5 space-y-2">
+          {members.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setUser(m.key)}
+              className="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-primary hover:bg-primary-soft/40"
+            >
+              <Avatar initials={initialsOf(m.name)} />
+              <span className="min-w-0">
+                <span className="block font-semibold text-ink">{m.name}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {m.role || "Team member"}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Small owner chip used in campaign lists and headers. */
+export function OwnerBadge({
+  owner,
+  team,
+}: {
+  owner: string | null;
+  team: Map<string, TeamMember>;
+}) {
+  const m = owner ? team.get(owner) : undefined;
+  if (!owner) return <span className="text-xs text-muted-foreground">Unassigned</span>;
+  const name = m?.name ?? owner;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink" title={m?.role}>
+      <span className="grid h-6 w-6 place-items-center rounded-full bg-primary-soft text-[10px] font-bold text-primary">
+        {initialsOf(name)}
+      </span>
+      {name}
+      {m && !m.active && <span className="text-muted-foreground">(left team)</span>}
+    </span>
   );
 }
 

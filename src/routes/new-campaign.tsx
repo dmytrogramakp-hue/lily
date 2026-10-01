@@ -5,6 +5,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { AppShell, Btn, Card, ErrorBanner } from "@/components/lily/AppShell";
 import { getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { PRESETS } from "@/lib/sequence";
+import { useCurrentUser, useTeam } from "@/lib/current-user";
 
 export const Route = createFileRoute("/new-campaign")({
   head: () => ({ meta: [{ title: "New campaign · Lily" }] }),
@@ -16,6 +17,11 @@ function NewCampaign() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [preset, setPreset] = useState<(typeof PRESETS)[number]["id"]>("invite_only");
+  const { user } = useCurrentUser();
+  const { members } = useTeam();
+  // null = follow whoever is using Lily; a string = picked explicitly ("" = unassigned).
+  const [ownerPick, setOwnerPick] = useState<string | null>(null);
+  const owner = ownerPick ?? user?.key ?? "";
   const campaigns = useQuery({
     queryKey: ["campaigns"],
     queryFn: () => unwrap(getCampaigns()),
@@ -33,6 +39,7 @@ function NewCampaign() {
             name: name.trim(),
             create: true,
             status: "draft",
+            owner,
             sequence: PRESETS.find((p) => p.id === preset)!.build(),
           },
         }),
@@ -69,6 +76,31 @@ function NewCampaign() {
         />
         {taken && (
           <p className="mt-2 text-xs text-destructive">A campaign with this name already exists.</p>
+        )}
+
+        {members.length > 0 && (
+          <>
+            <label
+              htmlFor="owner"
+              className="mt-6 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Owner
+            </label>
+            <select
+              id="owner"
+              value={owner}
+              onChange={(e) => setOwnerPick(e.target.value)}
+              className="mt-2 w-full rounded-lg border bg-card px-3 py-2.5 text-sm sm:w-80"
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.name}
+                  {m.role ? `, ${m.role}` : ""}
+                </option>
+              ))}
+            </select>
+          </>
         )}
 
         <div className="mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

@@ -10,6 +10,7 @@ import type {
   Invitation,
   Person,
   SentSummary,
+  TeamMember,
   UploadResult,
 } from "./types";
 
@@ -69,6 +70,12 @@ export const updateCampaign = createServerFn({ method: "POST" })
       create: z.boolean().optional(),
       status: z.enum(["draft", "active", "paused", "archived"]).optional(),
       sequence: sequenceSchema.optional(),
+      /** Team member key, or "" to unassign. */
+      owner: z
+        .string()
+        .max(60)
+        .regex(/^[a-z0-9-]*$/)
+        .optional(),
     }),
   )
   .handler(({ data }) =>
@@ -119,6 +126,51 @@ export const setSendingSettings = createServerFn({ method: "POST" })
   .handler(({ data }) =>
     guard(async () => {
       return n8n<{ ok: boolean }>("lily-settings", { method: "POST", json: data });
+    }),
+  );
+
+/* ---------------------------------------------------------------- team */
+// Team changes go through the lily-settings webhook (user_action) so n8n keeps a single
+// guarded settings entry point.
+
+export const saveTeamMember = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      key: z
+        .string()
+        .max(60)
+        .regex(/^[a-z0-9-]*$/)
+        .optional(),
+      name: z.string().trim().min(1, "Name is required").max(80),
+      role: z.string().trim().max(80),
+      email: z.union([z.literal(""), z.string().trim().email().max(160)]),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () => {
+      return n8n<{ ok: boolean; user: TeamMember }>("lily-settings", {
+        method: "POST",
+        json: { user_action: "save", user: data },
+      });
+    }),
+  );
+
+export const removeTeamMember = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      key: z
+        .string()
+        .min(1)
+        .max(60)
+        .regex(/^[a-z0-9-]+$/),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () => {
+      return n8n<{ ok: boolean }>("lily-settings", {
+        method: "POST",
+        json: { user_action: "remove", user: data },
+      });
     }),
   );
 

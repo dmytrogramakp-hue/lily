@@ -18,9 +18,11 @@ import {
   EmptyState,
   ErrorBanner,
   Loading,
+  OwnerBadge,
   StatusPill,
   timeAgo,
 } from "@/components/lily/AppShell";
+import { useCurrentUser, useTeam } from "@/lib/current-user";
 import { SendingCard } from "@/components/lily/SendingCard";
 import { getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { presetLabel } from "@/lib/sequence";
@@ -42,6 +44,9 @@ function Campaigns() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [scope, setScope] = useState<"everyone" | "mine">("everyone");
+  const { user } = useCurrentUser();
+  const { byKey: team, members } = useTeam();
   const campaigns = useQuery({
     queryKey: ["campaigns"],
     queryFn: () => unwrap(getCampaigns()),
@@ -55,10 +60,12 @@ function Campaigns() {
   const data = campaigns.data;
   const list = useMemo(
     () =>
-      (data?.campaigns ?? []).filter((c) =>
-        filter === "all" ? c.status !== "archived" : c.status === filter,
+      (data?.campaigns ?? []).filter(
+        (c) =>
+          (filter === "all" ? c.status !== "archived" : c.status === filter) &&
+          (scope === "everyone" || (!!user && c.owner === user.key)),
       ),
-    [data, filter],
+    [data, filter, scope, user],
   );
   const t = data?.totals;
   const kpis = [
@@ -151,6 +158,20 @@ function Campaigns() {
               {f}
             </button>
           ))}
+          {members.length > 1 && user && (
+            <div className="ml-3 inline-flex rounded-lg border p-0.5 text-xs font-semibold">
+              {(["everyone", "mine"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setScope(v)}
+                  className={`rounded-md px-2.5 py-1 capitalize transition ${scope === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
           {data && (
             <span className="ml-auto text-xs text-muted-foreground">
               Updated {timeAgo(data.generated_at)} ago
@@ -161,7 +182,9 @@ function Campaigns() {
         {campaigns.isPending ? (
           <Loading label="Reading the invite queue" />
         ) : list.length === 0 ? (
-          <EmptyState title="No campaigns here">
+          <EmptyState
+            title={scope === "mine" ? "You do not own any campaigns here" : "No campaigns here"}
+          >
             <Link to="/new-campaign" className="text-primary underline">
               Create a campaign
             </Link>{" "}
@@ -174,6 +197,7 @@ function Campaigns() {
                 <tr>
                   <th className="px-5 py-3 font-semibold">Campaign</th>
                   <th className="px-3 py-3 font-semibold">Status</th>
+                  <th className="px-3 py-3 font-semibold">Owner</th>
                   <th className="px-3 py-3 font-semibold">Sequence</th>
                   <th className="px-3 py-3 font-semibold">Leads</th>
                   <th className="px-3 py-3 font-semibold">Progress</th>
@@ -208,6 +232,13 @@ function Campaigns() {
                     </td>
                     <td className="px-3">
                       <StatusPill status={c.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-3">
+                      {c.status === "legacy" ? (
+                        <span className="text-xs text-muted-foreground">–</span>
+                      ) : (
+                        <OwnerBadge owner={c.owner} team={team} />
+                      )}
                     </td>
                     <td className="px-3 text-xs text-muted-foreground">
                       {presetLabel(c.sequence)}
