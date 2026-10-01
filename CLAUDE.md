@@ -55,4 +55,4 @@ cp .env.example .env.local   # fill in values
 npm install
 npm run dev -- --port 5174
 ```
-Deploy: Vercel auto-detects the host at build time (nitro). Set the env vars from `.env.example` in the project settings.
+Deploy: Vercel project `lily` (team dima-4116s-projects, prj_uxb0jNTsIvVv3Bx9kncIsvtE2StV), production URL https://lily-steel-sigma.vercel.app, target domain sales.newscatcher.business (previously the old `sales-tracker` project, which is kept but detached). Nitro detects Vercel at build time and writes `.vercel/output`. Production env vars (all sensitive) mirror `.env.example`. Deploy with `npx vercel --scope dima-4116s-projects deploy --prod`. Git auto-deploy is not connected yet.
