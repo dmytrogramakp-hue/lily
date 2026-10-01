@@ -264,8 +264,8 @@ function Leads() {
             <div className="mt-6 rounded-xl border bg-primary-soft/50 p-4 text-left text-sm">
               <div className="font-semibold text-ink">The campaign is paused.</div>
               <div className="mt-1 text-muted-foreground">
-                Nothing is sent until you activate it. Once active, invites go out at about 20 per
-                weekday, then the two follow-up messages run automatically.
+                Nothing is sent until you activate it. Once active, invites go out at the daily
+                limit set on the Campaigns page.
               </div>
               {activate.isSuccess ? (
                 <div className="mt-3 inline-flex items-center gap-2 font-semibold text-success">

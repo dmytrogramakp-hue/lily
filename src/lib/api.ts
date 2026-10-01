@@ -56,6 +56,19 @@ export const setCampaignStatus = createServerFn({ method: "POST" })
     }),
   );
 
+export const setSendingSettings = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      daily_invite_limit: z.number().int().min(0).max(100).optional(),
+      send_weekends: z.boolean().optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () => {
+      return n8n<{ ok: boolean }>("lily-settings", { method: "POST", json: data });
+    }),
+  );
+
 const leadSchema = z.object({
   linkedin_url: z.string().max(400),
   first_name: z.string().max(120).optional(),

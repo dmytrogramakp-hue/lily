@@ -39,7 +39,11 @@ export type CampaignSummary = {
     replied: number;
   };
   daily: DailyActivity[];
+  settings: SendingSettings;
+  today: { date: string; invites_sent: number };
 };
+
+export type SendingSettings = { daily_invite_limit: number; send_weekends: boolean };
 
 export type LeadInput = {
   linkedin_url: string;

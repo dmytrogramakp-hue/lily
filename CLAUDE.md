@@ -15,7 +15,8 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
                                               │
                                               ├─ Google Sheet "LI Invites Only" / tab "Invite Queue"   (all leads)
                                               ├─ Google Sheet tracker / tab "LinkedIn Outreach Tracker" (messages, replies)
-                                              └─ n8n data table "lily_campaigns"                        (campaign status)
+                                              ├─ n8n data table "lily_campaigns"                        (campaign status)
+                                              └─ n8n data table "lily_settings"                         (daily_invite_limit, send_weekends)
 ```
 - Server functions never throw across the boundary. They return `Result<T>`; the client calls `unwrap()`. Thrown errors from server fns did not reach the client in this TanStack version.
 - All keys stay server-side. `src/lib/server/env.ts` reads `.env.local` in dev because Vite does not expose non-`VITE_` vars to `process.env`.
@@ -24,17 +25,18 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
 ## n8n workflows (newscatcher.app.n8n.cloud, CatchAll project, folder Sales Automation)
 | Workflow | Id | Role |
 |---|---|---|
-| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
+| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status`, `lily-settings`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
 | LinkedIn Drip v2 - Message 1 | vlhdApprJVEOwNe7 | Daily 9:00. New connections from the queue get a Claude-written intro. |
 | LinkedIn Drip v2 - Message 2 | muc4p1HwTOQGq6Ib | Daily 9:30. Follow-up with calendar link 3 days later if no reply. |
-| LinkedIn - Send Invites (old) | sywANecBVuOg2Bss | Uses a revoked Unipile key and ignores campaigns. To be replaced by a campaign-aware sender that reads `lily_campaigns`. |
+| LinkedIn - Send Invites v2 | kUijiwRnqELRkEQt | Hourly 9:05 to 17:05 Madrid. Sends exactly `daily_invite_limit` per day (from `lily_settings`), spread over the remaining runs, max 10 per run, only to `active` campaigns. Marks unreachable and failed leads. |
+| LinkedIn - Send Invites (old) | sywANecBVuOg2Bss | Unpublished. Used a revoked Unipile key and ignored campaigns. |
 
 Campaign rules: uploads create campaigns with no status, shown as paused. Only `active` campaigns should be invited. Old rows without `campaign_name` show as "Legacy queue".
 
 ## Screens
 | Route | Data |
 |---|---|
-| `/` | Campaigns + KPIs from `lily-campaigns`; activate / pause via `lily-campaign-status` |
+| `/` | Daily invite limit + weekend switch (`lily-settings`), KPIs and campaigns from `lily-campaigns`, activate / pause via `lily-campaign-status` |
 | `/leads` | CSV upload (papaparse), column auto-mapping, preview, dedupe, posts to `lily-upload` |
 | `/sequences` | Read-only description of the real flow |
 | `/invites` | Unipile received (accept / ignore) and sent (withdraw) invitations |

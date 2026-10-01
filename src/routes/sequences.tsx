@@ -35,7 +35,7 @@ const steps: Step[] = [
     icon: UserPlus,
     tone: "bg-primary text-primary-foreground",
     title: "Connection invite",
-    when: "Weekdays 9:00 to 17:00, 4 per run, about 20 a day",
+    when: "Your daily limit, spread hourly from 9:00 to 17:00 Madrid time",
     detail:
       "Only leads in active campaigns. No note, so the invite looks like a normal request. Profiles LinkedIn will not resolve are skipped and marked, so the queue never stalls.",
   },

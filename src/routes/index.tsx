@@ -23,6 +23,7 @@ import {
 } from "@/components/lily/AppShell";
 import { getCampaigns, setCampaignStatus, unwrap } from "@/lib/api";
 import type { Campaign } from "@/lib/types";
+import { SendingCard } from "@/components/lily/SendingCard";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -91,7 +92,7 @@ function Campaigns() {
       return;
     }
     const ok = window.confirm(
-      `Activate "${c.name}"?\n\n${c.pending.toLocaleString()} leads are waiting. Invites go out at about 20 per weekday while the campaign is active.`,
+      `Activate "${c.name}"?\n\n${c.pending.toLocaleString()} leads are waiting. Invites go out at your daily limit (${data?.settings.daily_invite_limit ?? 20} a day) while the campaign is active.`,
     );
     if (ok) toggle.mutate({ name: c.name, status: "active" });
   };
@@ -129,6 +130,8 @@ function Campaigns() {
           <ErrorBanner error={toggle.error} />
         </div>
       )}
+
+      <SendingCard summary={data} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (

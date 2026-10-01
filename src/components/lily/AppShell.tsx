@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getCampaigns, unwrap } from "@/lib/api";
 import {
   LayoutGrid,
   Workflow,
@@ -31,6 +33,16 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const summary = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => unwrap(getCampaigns()),
+    staleTime: 60_000,
+  });
+  const limit = summary.data?.settings.daily_invite_limit;
+  const sent = summary.data?.today.invites_sent ?? 0;
+  const weekends = summary.data?.settings.send_weekends;
+  const activeCount = (summary.data?.campaigns ?? []).filter((c) => c.status === "active").length;
+
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-gradient-ink text-sidebar-foreground md:flex">
@@ -64,18 +76,33 @@ export function AppShell({
             </Link>
           ))}
         </nav>
-        <div className="m-3 rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-3">
+        <Link
+          to="/"
+          className="m-3 block rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-3 transition hover:bg-sidebar-accent"
+        >
           <div className="flex items-center justify-between text-xs">
-            <span>Invite pace</span>
-            <span className="font-semibold text-sidebar-accent-foreground">20 / weekday</span>
+            <span>Invites today</span>
+            <span className="font-semibold text-sidebar-accent-foreground">
+              {limit === undefined ? "–" : `${sent} / ${limit}`}
+            </span>
           </div>
-          <div className="mt-1 text-[11px] text-sidebar-foreground/70">
-            4 per run, 9:00 to 17:00, active campaigns only
+          <div className="mt-2 h-1.5 rounded-full bg-sidebar-border">
+            <div
+              className="h-full rounded-full bg-sidebar-ring"
+              style={{ width: `${limit ? Math.min(100, (sent / limit) * 100) : 0}%` }}
+            />
+          </div>
+          <div className="mt-2 text-[11px] text-sidebar-foreground/70">
+            {limit === undefined
+              ? "Loading sending status"
+              : activeCount === 0
+                ? "No active campaign, nothing is sending"
+                : `${activeCount} active campaign${activeCount > 1 ? "s" : ""} · 9:00 to 17:00${weekends ? ", every day" : ", weekdays"}`}
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="h-2 w-2 rounded-full bg-success" /> Dima Grama · LinkedIn via Unipile
           </div>
-        </div>
+        </Link>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
