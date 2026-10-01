@@ -14,6 +14,7 @@ import {
   timeAgo,
 } from "@/components/lily/AppShell";
 import { getInbox, getThread, sendMessage, unwrap } from "@/lib/api";
+import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
 
 export const Route = createFileRoute("/inbox")({
   head: () => ({
@@ -33,10 +34,14 @@ function Inbox() {
   const [active, setActive] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
+  const choice = useAccountChoice();
+  const account = choice.account;
+  useEffect(() => setActive(null), [account]);
 
   const inbox = useQuery({
-    queryKey: ["inbox"],
-    queryFn: () => unwrap(getInbox({ data: { limit: 40 } })),
+    queryKey: ["inbox", account],
+    queryFn: () => unwrap(getInbox({ data: { limit: 40, ...(account ? { account } : {}) } })),
+    enabled: choice.loaded,
     staleTime: 30_000,
   });
   const conversations = (inbox.data?.conversations ?? []).filter((c) =>
@@ -46,17 +51,19 @@ function Inbox() {
   const summary = (inbox.data?.conversations ?? []).find((c) => c.chat_id === activeId) ?? null;
 
   const thread = useQuery({
-    queryKey: ["thread", activeId],
-    queryFn: () => unwrap(getThread({ data: { chatId: activeId! } })),
+    queryKey: ["thread", account, activeId],
+    queryFn: () =>
+      unwrap(getThread({ data: { chatId: activeId!, ...(account ? { account } : {}) } })),
     enabled: !!activeId,
     staleTime: 15_000,
   });
 
   const send = useMutation({
-    mutationFn: (text: string) => unwrap(sendMessage({ data: { chatId: activeId!, text } })),
+    mutationFn: (text: string) =>
+      unwrap(sendMessage({ data: { chatId: activeId!, text, ...(account ? { account } : {}) } })),
     onSuccess: () => {
       setDraft("");
-      qc.invalidateQueries({ queryKey: ["thread", activeId] });
+      qc.invalidateQueries({ queryKey: ["thread", account, activeId] });
       qc.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
@@ -76,18 +83,29 @@ function Inbox() {
   return (
     <AppShell
       title="Inbox"
-      subtitle="Your LinkedIn conversations. Replies here go out from your own account."
+      subtitle={
+        choice.member
+          ? `${choice.member.name.split(" ")[0]}'s LinkedIn conversations. Replies go out from this account.`
+          : "LinkedIn conversations."
+      }
       actions={
-        <Btn
-          variant="outline"
-          onClick={() => {
-            qc.invalidateQueries({ queryKey: ["inbox"] });
-            qc.invalidateQueries({ queryKey: ["thread"] });
-          }}
-          disabled={inbox.isFetching}
-        >
-          <RefreshCw className={`h-4 w-4 ${inbox.isFetching ? "animate-spin" : ""}`} /> Refresh
-        </Btn>
+        <>
+          <AccountPicker
+            member={choice.member}
+            options={choice.options}
+            onChange={choice.setMember}
+          />
+          <Btn
+            variant="outline"
+            onClick={() => {
+              qc.invalidateQueries({ queryKey: ["inbox"] });
+              qc.invalidateQueries({ queryKey: ["thread"] });
+            }}
+            disabled={inbox.isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${inbox.isFetching ? "animate-spin" : ""}`} /> Refresh
+          </Btn>
+        </>
       }
     >
       {inbox.error && (

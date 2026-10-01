@@ -41,8 +41,16 @@ export function AppShell({
     queryFn: () => unwrap(getCampaigns()),
     staleTime: 60_000,
   });
+  const { user } = useCurrentUser();
   const limit = summary.data?.settings.daily_invite_limit;
-  const sent = summary.data?.today.invites_sent ?? 0;
+  const defaultAccount = summary.data?.default_account;
+  // The card shows the LinkedIn of whoever is using Lily; the daily limit applies per account.
+  const myAccount = user?.unipile_account_id || null;
+  const shownAccount = myAccount ?? (user ? null : (defaultAccount ?? null));
+  const sent = shownAccount
+    ? (summary.data?.today.by_account?.[shownAccount]?.invites ??
+      (shownAccount === defaultAccount ? (summary.data?.today.invites_sent ?? 0) : 0))
+    : 0;
   const weekends = summary.data?.settings.send_weekends;
   const activeCount = (summary.data?.campaigns ?? []).filter((c) => c.status === "active").length;
 
@@ -84,9 +92,9 @@ export function AppShell({
           className="m-3 block rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-3 transition hover:bg-sidebar-accent"
         >
           <div className="flex items-center justify-between text-xs">
-            <span>Invites today</span>
+            <span>{user && myAccount ? "Your invites today" : "Invites today"}</span>
             <span className="font-semibold text-sidebar-accent-foreground">
-              {limit === undefined ? "–" : `${sent} / ${limit}`}
+              {limit === undefined || (user && !myAccount) ? "–" : `${sent} / ${limit}`}
             </span>
           </div>
           <div className="mt-2 h-1.5 rounded-full bg-sidebar-border">
@@ -103,7 +111,17 @@ export function AppShell({
                 : `${activeCount} active campaign${activeCount > 1 ? "s" : ""} · 9:00 to 17:00${weekends ? ", every day" : ", weekdays"}`}
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="h-2 w-2 rounded-full bg-success" /> Sending from Dima's LinkedIn
+            {user && !myAccount ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-warning" /> Connect your LinkedIn in
+                Settings
+              </>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-success" />
+                {user ? `${user.linkedin_name || user.name}'s LinkedIn` : "Dima's LinkedIn"}
+              </>
+            )}
           </div>
         </Link>
       </aside>

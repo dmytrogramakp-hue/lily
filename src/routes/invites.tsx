@@ -16,6 +16,7 @@ import {
 import { getInvites, respondToInvite, withdrawInvite, unwrap } from "@/lib/api";
 import type { Invitation } from "@/lib/types";
 import { BulkWithdrawCard } from "@/components/lily/BulkWithdrawCard";
+import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
 
 export const Route = createFileRoute("/invites")({
   head: () => ({
@@ -36,9 +37,13 @@ function Invites() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"incoming" | "outgoing">("incoming");
   const [done, setDone] = useState<Record<string, Outcome>>({});
+  const choice = useAccountChoice();
+  const account = choice.account;
+  const acc = account ? { account } : {};
   const invites = useQuery({
-    queryKey: ["invites"],
-    queryFn: () => unwrap(getInvites()),
+    queryKey: ["invites", account],
+    queryFn: () => unwrap(getInvites({ data: acc })),
+    enabled: choice.loaded,
     staleTime: 60_000,
   });
 
@@ -46,14 +51,19 @@ function Invites() {
     mutationFn: (v: { inv: Invitation; action: "accept" | "decline" }) =>
       unwrap(
         respondToInvite({
-          data: { id: v.inv.id, action: v.action, shared_secret: v.inv.shared_secret ?? "" },
+          data: {
+            id: v.inv.id,
+            action: v.action,
+            shared_secret: v.inv.shared_secret ?? "",
+            ...acc,
+          },
         }),
       ),
     onSuccess: (_r, v) =>
       setDone((d) => ({ ...d, [v.inv.id]: v.action === "accept" ? "accepted" : "ignored" })),
   });
   const withdraw = useMutation({
-    mutationFn: (inv: Invitation) => unwrap(withdrawInvite({ data: { id: inv.id } })),
+    mutationFn: (inv: Invitation) => unwrap(withdrawInvite({ data: { id: inv.id, ...acc } })),
     onSuccess: (_r, inv) => setDone((d) => ({ ...d, [inv.id]: "withdrawn" })),
   });
 
@@ -65,18 +75,28 @@ function Invites() {
   return (
     <AppShell
       title="Invites"
-      subtitle="People who want to connect with you, and invites you have sent that are still pending."
+      subtitle={`People who want to connect with ${choice.member ? choice.member.name.split(" ")[0] : "you"}, and invites sent from this LinkedIn that are still pending.`}
       actions={
-        <Btn
-          variant="outline"
-          onClick={() => {
-            setDone({});
-            qc.invalidateQueries({ queryKey: ["invites"] });
-          }}
-          disabled={invites.isFetching}
-        >
-          <RefreshCw className={`h-4 w-4 ${invites.isFetching ? "animate-spin" : ""}`} /> Refresh
-        </Btn>
+        <>
+          <AccountPicker
+            member={choice.member}
+            options={choice.options}
+            onChange={(k) => {
+              setDone({});
+              choice.setMember(k);
+            }}
+          />
+          <Btn
+            variant="outline"
+            onClick={() => {
+              setDone({});
+              qc.invalidateQueries({ queryKey: ["invites"] });
+            }}
+            disabled={invites.isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${invites.isFetching ? "animate-spin" : ""}`} /> Refresh
+          </Btn>
+        </>
       }
     >
       <div className="mb-4 inline-flex rounded-xl border bg-card p-1">
@@ -92,7 +112,9 @@ function Invites() {
         ))}
       </div>
 
-      {tab === "outgoing" && <BulkWithdrawCard />}
+      {tab === "outgoing" && (
+        <BulkWithdrawCard account={account} accountLabel={choice.member?.name ?? null} />
+      )}
 
       {invites.error && (
         <div className="mb-4">

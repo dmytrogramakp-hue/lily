@@ -68,3 +68,32 @@ export function useCurrentUser() {
   }, [onlyKey]);
   return { user, setUser, needsChoice: loaded && !user && members.length > 1 };
 }
+
+/** The LinkedIn account a campaign sends from: its owner's, or Dima's default when unassigned. */
+export function senderFor(
+  owner: string | null | undefined,
+  byKey: Map<string, TeamMember>,
+  defaultAccount: string | undefined,
+): { member: TeamMember | null; account: string | null; reason: "owner" | "default" | "missing" } {
+  if (!owner) {
+    const dima = byKey.get("dima") ?? null;
+    return {
+      member: dima,
+      account: defaultAccount ?? dima?.unipile_account_id ?? null,
+      reason: "default",
+    };
+  }
+  const member = byKey.get(owner) ?? null;
+  const account = member?.active ? member.unipile_account_id || null : null;
+  return { member, account, reason: account ? "owner" : "missing" };
+}
+
+/** How Claude should sign as this person. */
+export function senderProfile(member: TeamMember | null | undefined) {
+  if (!member) return undefined;
+  return {
+    name: member.name,
+    ...(member.role ? { role: member.role } : {}),
+    first_name: member.name.split(" ")[0] ?? member.name,
+  };
+}

@@ -44,8 +44,9 @@ export function SendingCard({ summary }: { summary: CampaignSummary | undefined 
             <Gauge className="h-4 w-4 text-primary" /> Daily invite limit
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Lily sends exactly this many connection requests per {weekends ? "day" : "weekday"},
-            spread hourly between 9:00 and 17:00 Madrid time, to leads in active campaigns.
+            Lily sends exactly this many connection requests per LinkedIn account per{" "}
+            {weekends ? "day" : "weekday"}, spread hourly between 9:00 and 17:00 Madrid time, to
+            leads in active campaigns.
           </p>
           <div className="mt-4 flex items-center gap-4">
             <input

@@ -1,6 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { n8n, unipile } from "./server/clients";
+import { createLinkToken } from "./server/link-token";
+import {
+  getLinkedInAccount,
+  linkMemberAccount,
+  listLinkedInAccounts,
+} from "./server/linkedin-accounts";
+import { env } from "./server/env";
 import type {
   CampaignLead,
   CampaignSummary,
@@ -8,6 +15,7 @@ import type {
   ChatMessage,
   ConversationSummary,
   Invitation,
+  LinkedInAccount,
   Person,
   SentSummary,
   TeamMember,
@@ -35,6 +43,12 @@ export async function unwrap<T>(promise: Promise<Result<T>>): Promise<T> {
   if (!result.ok) throw new Error(result.error);
   return result.data;
 }
+
+/** A Unipile LinkedIn account id. Omitted = Dima's default account. */
+const accountSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{5,64}$/)
+  .optional();
 
 /* ---------------------------------------------------------------- campaigns */
 
@@ -144,6 +158,10 @@ export const saveTeamMember = createServerFn({ method: "POST" })
       name: z.string().trim().min(1, "Name is required").max(80),
       role: z.string().trim().max(80),
       email: z.union([z.literal(""), z.string().trim().email().max(160)]),
+      calendar_link: z.union([
+        z.literal(""),
+        z.string().trim().url().startsWith("https://").max(300),
+      ]),
     }),
   )
   .handler(({ data }) =>
@@ -225,10 +243,10 @@ const isTrue = (v: unknown) => v === true || v === 1 || v === "1";
 const linkedinUrl = (publicId?: string | null) =>
   publicId ? `https://www.linkedin.com/in/${publicId}` : null;
 
-async function attendeeOf(chatId: string): Promise<Person> {
-  const res = await unipile<UList<UAttendee>>(
-    `/chats/${encodeURIComponent(chatId)}/attendees`,
-  ).catch(() => ({ items: [] }));
+async function attendeeOf(chatId: string, account?: string): Promise<Person> {
+  const res = await unipile<UList<UAttendee>>(`/chats/${encodeURIComponent(chatId)}/attendees`, {
+    account,
+  }).catch(() => ({ items: [] }));
   const other = (res.items ?? []).find((a) => !isTrue(a.is_self)) ?? null;
   return {
     name: other?.name || "LinkedIn member",
@@ -264,20 +282,26 @@ async function mapLimit<T, R>(
 /* ---------------------------------------------------------------- inbox */
 
 export const getInbox = createServerFn({ method: "GET" })
-  .validator(z.object({ limit: z.number().int().min(1).max(60).default(30) }).optional())
+  .validator(
+    z
+      .object({ limit: z.number().int().min(1).max(60).default(30), account: accountSchema })
+      .optional(),
+  )
   .handler(({ data }) =>
     guard(async () => {
       const limit = data?.limit ?? 30;
-      const chats = await unipile<UList<UChat>>("/chats", { query: { limit } });
+      const account = data?.account;
+      const chats = await unipile<UList<UChat>>("/chats", { query: { limit }, account });
       const active = (chats.items ?? []).filter((c) => !isTrue(c.archived));
       const conversations = await mapLimit(
         active,
         6,
         async (chat): Promise<ConversationSummary> => {
           const [person, messages] = await Promise.all([
-            attendeeOf(chat.id),
+            attendeeOf(chat.id, account),
             unipile<UList<UMessage>>(`/chats/${encodeURIComponent(chat.id)}/messages`, {
               query: { limit: 1 },
+              account,
             }).catch(() => ({ items: [] })),
           ]);
           const last = (messages.items ?? [])[0];
@@ -297,13 +321,14 @@ export const getInbox = createServerFn({ method: "GET" })
   );
 
 export const getThread = createServerFn({ method: "GET" })
-  .validator(z.object({ chatId: z.string().min(1).max(200) }))
+  .validator(z.object({ chatId: z.string().min(1).max(200), account: accountSchema }))
   .handler(({ data }) =>
     guard(async () => {
       const [person, messages] = await Promise.all([
-        attendeeOf(data.chatId),
+        attendeeOf(data.chatId, data.account),
         unipile<UList<UMessage>>(`/chats/${encodeURIComponent(data.chatId)}/messages`, {
           query: { limit: 60 },
+          account: data.account,
         }),
       ]);
       const list = (messages.items ?? [])
@@ -315,7 +340,11 @@ export const getThread = createServerFn({ method: "GET" })
 
 export const sendMessage = createServerFn({ method: "POST" })
   .validator(
-    z.object({ chatId: z.string().min(1).max(200), text: z.string().trim().min(1).max(8000) }),
+    z.object({
+      chatId: z.string().min(1).max(200),
+      text: z.string().trim().min(1).max(8000),
+      account: accountSchema,
+    }),
   )
   .handler(({ data }) =>
     guard(async () => {
@@ -324,6 +353,7 @@ export const sendMessage = createServerFn({ method: "POST" })
         {
           method: "POST",
           form: { text: data.text },
+          account: data.account,
         },
       );
       return { ok: true, message_id: res.message_id ?? null };
@@ -359,43 +389,46 @@ type USent = {
   invited_user_description?: string;
 };
 
-export const getInvites = createServerFn({ method: "GET" }).handler(() =>
-  guard(async () => {
-    const [received, sent] = await Promise.all([
-      unipile<UList<UReceived>>("/users/invite/received", { query: { limit: 100 } }),
-      unipile<UList<USent>>("/users/invite/sent", { query: { limit: 100 } }),
-    ]);
-    const incoming: Invitation[] = (received.items ?? []).map((r) => ({
-      id: r.id,
-      direction: "incoming",
-      person: {
-        name: r.inviter?.inviter_name || "LinkedIn member",
-        headline: r.inviter?.inviter_description || null,
-        picture_url: r.inviter?.inviter_profile_picture_url || null,
-        profile_url: linkedinUrl(r.inviter?.inviter_public_identifier),
-        provider_id: r.inviter?.inviter_id || null,
-      },
-      note: r.invitation_text || r.message || null,
-      at: r.parsed_datetime || null,
-      shared_secret: r.specifics?.shared_secret || r.shared_secret || null,
-    }));
-    const outgoing: Invitation[] = (sent.items ?? []).map((s) => ({
-      id: s.id,
-      direction: "outgoing",
-      person: {
-        name: s.invited_user || "LinkedIn member",
-        headline: s.invited_user_description || null,
-        picture_url: s.invited_user_profile_picture_url || null,
-        profile_url: linkedinUrl(s.invited_user_public_id),
-        provider_id: s.invited_user_id || null,
-      },
-      note: s.invitation_text || null,
-      at: s.parsed_datetime || null,
-      shared_secret: null,
-    }));
-    return { incoming, outgoing };
-  }),
-);
+export const getInvites = createServerFn({ method: "GET" })
+  .validator(z.object({ account: accountSchema }).optional())
+  .handler(({ data }) =>
+    guard(async () => {
+      const account = data?.account;
+      const [received, sent] = await Promise.all([
+        unipile<UList<UReceived>>("/users/invite/received", { query: { limit: 100 }, account }),
+        unipile<UList<USent>>("/users/invite/sent", { query: { limit: 100 }, account }),
+      ]);
+      const incoming: Invitation[] = (received.items ?? []).map((r) => ({
+        id: r.id,
+        direction: "incoming",
+        person: {
+          name: r.inviter?.inviter_name || "LinkedIn member",
+          headline: r.inviter?.inviter_description || null,
+          picture_url: r.inviter?.inviter_profile_picture_url || null,
+          profile_url: linkedinUrl(r.inviter?.inviter_public_identifier),
+          provider_id: r.inviter?.inviter_id || null,
+        },
+        note: r.invitation_text || r.message || null,
+        at: r.parsed_datetime || null,
+        shared_secret: r.specifics?.shared_secret || r.shared_secret || null,
+      }));
+      const outgoing: Invitation[] = (sent.items ?? []).map((s) => ({
+        id: s.id,
+        direction: "outgoing",
+        person: {
+          name: s.invited_user || "LinkedIn member",
+          headline: s.invited_user_description || null,
+          picture_url: s.invited_user_profile_picture_url || null,
+          profile_url: linkedinUrl(s.invited_user_public_id),
+          provider_id: s.invited_user_id || null,
+        },
+        note: s.invitation_text || null,
+        at: s.parsed_datetime || null,
+        shared_secret: null,
+      }));
+      return { incoming, outgoing };
+    }),
+  );
 
 export const respondToInvite = createServerFn({ method: "POST" })
   .validator(
@@ -403,6 +436,7 @@ export const respondToInvite = createServerFn({ method: "POST" })
       id: z.string().min(1).max(200),
       action: z.enum(["accept", "decline"]),
       shared_secret: z.string().min(1).max(500),
+      account: accountSchema,
     }),
   )
   .handler(({ data }) =>
@@ -410,16 +444,20 @@ export const respondToInvite = createServerFn({ method: "POST" })
       await unipile(`/users/invite/received/${encodeURIComponent(data.id)}`, {
         method: "POST",
         json: { provider: "LINKEDIN", action: data.action, shared_secret: data.shared_secret },
+        account: data.account,
       });
       return { ok: true };
     }),
   );
 
 export const withdrawInvite = createServerFn({ method: "POST" })
-  .validator(z.object({ id: z.string().min(1).max(200) }))
+  .validator(z.object({ id: z.string().min(1).max(200), account: accountSchema }))
   .handler(({ data }) =>
     guard(async () => {
-      await unipile(`/users/invite/sent/${encodeURIComponent(data.id)}`, { method: "DELETE" });
+      await unipile(`/users/invite/sent/${encodeURIComponent(data.id)}`, {
+        method: "DELETE",
+        account: data.account,
+      });
       return { ok: true };
     }),
   );
@@ -428,12 +466,13 @@ export const withdrawInvite = createServerFn({ method: "POST" })
 
 const MAX_SENT_SCAN = 5000;
 
-async function listAllSent(): Promise<{ items: USent[]; truncated: boolean }> {
+async function listAllSent(account?: string): Promise<{ items: USent[]; truncated: boolean }> {
   const items: USent[] = [];
   let cursor: string | null | undefined;
   do {
     const page: UList<USent> = await unipile<UList<USent>>("/users/invite/sent", {
       query: { limit: 100, cursor: cursor ?? undefined },
+      account,
     });
     items.push(...(page.items ?? []));
     cursor = page.cursor;
@@ -450,13 +489,16 @@ function eligibleOldestFirst(items: USent[], minAgeDays: number) {
   return items.filter((s) => minAgeDays <= 0 || at(s) <= cutoff).sort((a, b) => at(a) - at(b));
 }
 
-const ageSchema = z.object({ minAgeDays: z.number().int().min(0).max(365).default(0) });
+const ageSchema = z.object({
+  minAgeDays: z.number().int().min(0).max(365).default(0),
+  account: accountSchema,
+});
 
 export const getSentSummary = createServerFn({ method: "GET" })
   .validator(ageSchema)
   .handler(({ data }) =>
     guard(async (): Promise<SentSummary> => {
-      const { items, truncated } = await listAllSent();
+      const { items, truncated } = await listAllSent(data.account);
       const eligible = eligibleOldestFirst(items, data.minAgeDays);
       return {
         total: items.length,
@@ -471,12 +513,16 @@ export const startBulkWithdraw = createServerFn({ method: "POST" })
   .validator(ageSchema.extend({ count: z.number().int().min(1).max(3000) }))
   .handler(({ data }) =>
     guard(async () => {
-      const { items } = await listAllSent();
+      const { items } = await listAllSent(data.account);
       const picked = eligibleOldestFirst(items, data.minAgeDays).slice(0, data.count);
       if (picked.length === 0) throw new Error("No pending invites match. Nothing was withdrawn.");
       return n8n<{ ok: boolean; queued: number }>("lily-withdraw", {
         method: "POST",
-        json: { ids: picked.map((p) => p.id), start_total: items.length },
+        json: {
+          ids: picked.map((p) => p.id),
+          start_total: items.length,
+          ...(data.account ? { account_id: data.account } : {}),
+        },
       });
     }),
   );
@@ -508,16 +554,18 @@ const clipText = (v: unknown, n: number) =>
     .slice(0, n);
 
 /** Reads a lead's LinkedIn profile and recent posts and compacts them for the prompt. */
-async function profileForAI(linkedinUrl: string) {
+async function profileForAI(linkedinUrl: string, account?: string) {
   const m = linkedinUrl.match(/linkedin\.com\/(?:in|pub)\/([^/?#\s]+)/i);
   if (!m?.[1]) throw new Error("This lead has no valid LinkedIn URL.");
   const p = await unipile<UProfile>(`/users/${encodeURIComponent(m[1].replace(/\/$/, ""))}`, {
     query: { linkedin_sections: "*" },
+    account,
   });
   const posts = p.provider_id
     ? ((
         await unipile<UList<UPost>>(`/users/${encodeURIComponent(p.provider_id)}/posts`, {
           query: { limit: 3 },
+          account,
         }).catch(() => ({ items: [] as UPost[] }))
       ).items ?? [])
     : [];
@@ -563,6 +611,15 @@ async function profileForAI(linkedinUrl: string) {
   };
 }
 
+/** Who the message is from, so Claude writes and signs as the sending team member. */
+const senderSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    role: z.string().trim().max(80).optional(),
+    first_name: z.string().trim().max(40).optional(),
+  })
+  .optional();
+
 const stepSchema = z.object({
   index: z.number().int().min(1).max(3),
   wait_days: z.number().int().min(0).max(30),
@@ -582,17 +639,20 @@ export const generateForLead = createServerFn({ method: "POST" })
       kind: z.enum(["invite_note", "message"]),
       step: stepSchema,
       previous_message: z.string().max(2000).optional(),
+      sender: senderSchema,
+      account: accountSchema,
     }),
   )
   .handler(({ data }) =>
     guard(async (): Promise<GeneratedText> => {
-      const profile = await profileForAI(data.lead_url);
+      const profile = await profileForAI(data.lead_url, data.account);
       const res = await writer({
         mode: "message",
         kind: data.kind,
         step: data.step,
         profile: profile.compact,
         previous_message: data.previous_message,
+        sender: data.sender,
       });
       return { ...res, profile: profile.summary };
     }),
@@ -607,9 +667,87 @@ export const draftTemplate = createServerFn({ method: "POST" })
         .array(z.object({ title: z.string().max(200), company: z.string().max(200) }))
         .max(20),
       previous_message: z.string().max(2000).optional(),
+      sender: senderSchema,
     }),
   )
   .handler(({ data }) => guard(async () => writer({ mode: "template", ...data })));
+
+/* ---------------------------------------------------------------- LinkedIn accounts per team member */
+
+const memberKeySchema = z
+  .string()
+  .min(1)
+  .max(60)
+  .regex(/^[a-z0-9-]+$/);
+
+export const getLinkedInAccounts = createServerFn({ method: "GET" }).handler(() =>
+  guard(async (): Promise<{ accounts: LinkedInAccount[] }> => ({
+    accounts: await listLinkedInAccounts(),
+  })),
+);
+
+/**
+ * Creates a one-time Unipile hosted link. The team member opens it, signs in to LinkedIn on
+ * Unipile's page (Lily never sees the password), and Unipile calls our notify endpoint, which
+ * links the new account to that member. Reconnect refreshes an expired session in place.
+ */
+export const createLinkedInConnectLink = createServerFn({ method: "POST" })
+  .validator(z.object({ member: memberKeySchema, reconnect: accountSchema }))
+  .handler(({ data }) =>
+    guard(async () => {
+      const base = ((await env("LILY_PUBLIC_URL")) || "https://sales.newscatcher.business").replace(
+        /\/$/,
+        "",
+      );
+      const dsn = ((await env("UNIPILE_DSN")) || "https://api24.unipile.com:15454").replace(
+        /\/$/,
+        "",
+      );
+      const ttl = 2 * 60 * 60;
+      const back = `${base}/settings?member=${encodeURIComponent(data.member)}&linkedin=`;
+      const res = await unipile<{ url?: string }>("/hosted/accounts/link", {
+        method: "POST",
+        workspace: true,
+        json: {
+          type: data.reconnect ? "reconnect" : "create",
+          ...(data.reconnect ? { reconnect_account: data.reconnect } : {}),
+          providers: ["LINKEDIN"],
+          api_url: dsn,
+          expiresOn: new Date(Date.now() + ttl * 1000).toISOString(),
+          name: await createLinkToken(data.member, ttl),
+          notify_url: `${base}/api/unipile/notify`,
+          success_redirect_url: `${back}connected`,
+          failure_redirect_url: `${back}failed`,
+        },
+      });
+      if (!res.url) throw new Error("Unipile did not return a connect link. Try again.");
+      return { url: res.url };
+    }),
+  );
+
+/** Links an account that already exists in the Unipile workspace (for example created there by hand). */
+export const linkLinkedInAccount = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ member: memberKeySchema, account: z.string().regex(/^[A-Za-z0-9_-]{5,64}$/) }),
+  )
+  .handler(({ data }) => guard(async () => linkMemberAccount(data.member, data.account)));
+
+/** Detaches the account from the member in Lily. It stays connected in Unipile. */
+export const unlinkLinkedInAccount = createServerFn({ method: "POST" })
+  .validator(z.object({ member: memberKeySchema }))
+  .handler(({ data }) =>
+    guard(async () =>
+      n8n<{ ok: boolean }>("lily-settings", {
+        method: "POST",
+        json: { user_action: "unlink_account", user: { key: data.member } },
+      }),
+    ),
+  );
+
+/** Live status of one account, used to warn when a session needs reconnecting. */
+export const getLinkedInAccountStatus = createServerFn({ method: "GET" })
+  .validator(z.object({ account: z.string().regex(/^[A-Za-z0-9_-]{5,64}$/) }))
+  .handler(({ data }) => guard(async () => getLinkedInAccount(data.account)));
 
 export const testClaude = createServerFn({ method: "GET" }).handler(() =>
   guard(async () =>

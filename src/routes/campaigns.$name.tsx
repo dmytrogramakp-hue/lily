@@ -30,7 +30,7 @@ import { SequenceEditor } from "@/components/lily/SequenceEditor";
 import { getCampaignLeads, getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { describeSequence, presetLabel } from "@/lib/sequence";
 import type { Campaign, CampaignLead, LeadStage } from "@/lib/types";
-import { useCurrentUser, useTeam } from "@/lib/current-user";
+import { senderFor, senderProfile, useCurrentUser, useTeam } from "@/lib/current-user";
 
 export const Route = createFileRoute("/campaigns/$name")({
   head: ({ params }) => ({ meta: [{ title: `${params.name} · Lily` }] }),
@@ -75,6 +75,7 @@ function CampaignPage() {
   });
   const c = summary.data?.campaigns.find((x) => x.name === name);
   const isLegacyQueue = name === "Legacy queue";
+  const { byKey: team } = useTeam();
 
   const [tab, setTab] = useState<Tab | null>(null);
   useEffect(() => {
@@ -118,7 +119,9 @@ function CampaignPage() {
   }
 
   const limit = summary.data?.settings.daily_invite_limit ?? 20;
-  const canLaunch = !isLegacyQueue && c.leads > 0 && !!c.sequence && c.pending > 0;
+  const from = senderFor(c.owner, team, summary.data?.default_account);
+  const noSender = !isLegacyQueue && !from.account;
+  const canLaunch = !isLegacyQueue && c.leads > 0 && !!c.sequence && c.pending > 0 && !noSender;
   const etaDays = limit > 0 ? Math.ceil(c.pending / limit) : null;
 
   const launch = () => {
@@ -171,6 +174,12 @@ function CampaignPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <StatusPill status={c.status} />
         {!isLegacyQueue && <OwnerControl campaign={c} />}
+        {!isLegacyQueue && from.account && (
+          <span className="text-xs text-muted-foreground">
+            Sends from {from.member?.linkedin_name || from.member?.name || "Dima"}'s LinkedIn
+            {from.reason === "default" ? " (unassigned campaigns use Dima's)" : ""}
+          </span>
+        )}
         {c.status === "active" && (
           <span className="text-xs text-muted-foreground">
             Sending {limit} invites a day{etaDays ? `, about ${etaDays} sending days left` : ""}
@@ -178,6 +187,20 @@ function CampaignPage() {
         )}
         {status.error && <ErrorBanner error={status.error} />}
       </div>
+
+      {noSender && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+          {from.member?.active === false
+            ? `${from.member.name} has left the team.`
+            : `${from.member?.name ?? "The owner"} has not connected a LinkedIn account yet.`}{" "}
+          {c.status === "active"
+            ? "Nothing is being sent for this campaign until that is fixed."
+            : "Connect it or assign the campaign to someone with LinkedIn connected before launching."}
+          <Link to="/settings" className="font-semibold underline">
+            Open Team settings
+          </Link>
+        </div>
+      )}
 
       {(c.status === "draft" || c.status === "legacy") && !isLegacyQueue && (
         <SetupChecklist campaign={c} onGo={setTab} canLaunch={canLaunch} onLaunch={launch} />
@@ -655,6 +678,13 @@ function LeadsTab({ campaign: c, locked }: { campaign: Campaign; locked: boolean
 }
 
 function SequenceTab({ campaign: c, locked }: { campaign: Campaign; locked: string | null }) {
+  const { byKey } = useTeam();
+  const summary = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => unwrap(getCampaigns()),
+    staleTime: 60_000,
+  });
+  const from = senderFor(c.owner, byKey, summary.data?.default_account);
   const leads = useQuery({
     queryKey: ["campaign-leads", c.name],
     queryFn: () => unwrap(getCampaignLeads({ data: { name: c.name } })),
@@ -667,6 +697,8 @@ function SequenceTab({ campaign: c, locked }: { campaign: Campaign; locked: stri
       initial={c.sequence}
       leads={leads.data?.leads ?? []}
       locked={locked}
+      sender={senderProfile(from.member)}
+      account={from.account ?? undefined}
     />
   );
 }

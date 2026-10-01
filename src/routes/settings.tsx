@@ -36,6 +36,24 @@ function Settings() {
   const [model, setModel] = useState<AiModel>("claude-sonnet-5");
   const [context, setContext] = useState("");
   const [offer, setOffer] = useState("");
+  // Unipile sends people back here after the LinkedIn connect wizard.
+  const [linkResult, setLinkResult] = useState<"connected" | "failed" | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("linkedin");
+    if (r === "connected" || r === "failed") {
+      setLinkResult(r);
+      window.history.replaceState(null, "", window.location.pathname);
+      if (r === "connected") {
+        // The account is attached by Unipile's callback, usually within seconds.
+        const t = [3000, 8000, 15000].map((ms) =>
+          setTimeout(() => qc.invalidateQueries({ queryKey: ["campaigns"] }), ms),
+        );
+        return () => t.forEach(clearTimeout);
+      }
+    }
+    return undefined;
+  }, [qc]);
 
   useEffect(() => {
     if (!saved) return;
@@ -66,6 +84,17 @@ function Settings() {
       title="Settings"
       subtitle="Your team, how Lily connects to Claude, and what it says about NewsCatcher."
     >
+      {linkResult === "connected" && (
+        <div className="mb-4 rounded-xl border border-success/30 bg-success-soft px-4 py-3 text-sm text-success">
+          LinkedIn connected. It shows up on the team list within a few seconds. You can close this
+          tab if you opened it from a link.
+        </div>
+      )}
+      {linkResult === "failed" && (
+        <div className="mb-4">
+          <ErrorBanner error="LinkedIn sign-in did not finish. Create a new connect link and try again." />
+        </div>
+      )}
       {summary.error && <ErrorBanner error={summary.error} />}
       {summary.isPending ? (
         <Card>

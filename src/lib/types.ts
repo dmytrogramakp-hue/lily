@@ -49,7 +49,15 @@ export type CampaignSummary = {
   settings: SendingSettings;
   /** Everyone who can be picked as "who is using Lily" and assigned as a campaign owner. */
   users?: TeamMember[];
-  today: { date: string; invites_sent: number; messages_sent?: number };
+  today: {
+    date: string;
+    invites_sent: number;
+    messages_sent?: number;
+    /** Invites and messages sent today per Unipile account id. */
+    by_account?: Record<string, { invites: number; messages: number }>;
+  };
+  /** Account used for unassigned and legacy campaigns (Dima's). */
+  default_account?: string;
   jobs?: { withdraw: WithdrawJob | null };
 };
 
@@ -60,6 +68,20 @@ export type TeamMember = {
   role: string;
   email: string;
   active: boolean;
+  /** Unipile account id of this person's connected LinkedIn, empty when not connected. */
+  unipile_account_id?: string;
+  linkedin_name?: string;
+  linkedin_connected_at?: string;
+  /** Used for {{calendar_link}} in this person's template messages. */
+  calendar_link?: string;
+};
+
+/** A LinkedIn account in the Unipile workspace. status "OK" means it can send. */
+export type LinkedInAccount = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string | null;
 };
 
 export type WithdrawJob = {

@@ -141,11 +141,17 @@ export function SequenceEditor({
   initial,
   leads,
   locked,
+  sender,
+  account,
 }: {
   campaign: string;
   initial: Sequence | null;
   leads: CampaignLead[];
   locked?: string | null;
+  /** The campaign owner, so Claude writes and signs as the person whose LinkedIn sends. */
+  sender?: { name: string; role?: string; first_name?: string } | undefined;
+  /** That person's LinkedIn account, used to read lead profiles for previews. */
+  account?: string | undefined;
 }) {
   const qc = useQueryClient();
   const [seq, setSeq] = useState<Sequence>(initial ?? PRESETS[0]!.build());
@@ -184,6 +190,8 @@ export function SequenceEditor({
             kind: "message",
             step: { index: v.stepIndex, wait_days: m.wait_days, instructions: m.text },
             ...(previous ? { previous_message: previous } : {}),
+            ...(sender ? { sender } : {}),
+            ...(account ? { account } : {}),
           },
         }),
       );
@@ -207,6 +215,7 @@ export function SequenceEditor({
             ...(prevStep?.mode === "template" && prevStep.text
               ? { previous_message: prevStep.text }
               : {}),
+            ...(sender ? { sender } : {}),
           },
         }),
       );

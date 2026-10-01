@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { env as readEnv } from "./lib/server/env";
+import { NOTIFY_PATH, handleUnipileNotify } from "./lib/server/unipile-notify";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -85,6 +86,10 @@ async function checkAuth(request: Request): Promise<Response | null> {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Unipile's "LinkedIn connected" callback cannot send basic auth; it is verified by a signed token.
+    if (request.method === "POST" && new URL(request.url).pathname === NOTIFY_PATH) {
+      return handleUnipileNotify(request);
+    }
     const denied = await checkAuth(request);
     if (denied) return denied;
     try {

@@ -34,6 +34,10 @@ export async function unipile<T>(
     query?: Query;
     json?: unknown;
     form?: Record<string, string>;
+    /** LinkedIn account to act as. Defaults to UNIPILE_ACCOUNT_ID (Dima's account). */
+    account?: string | null | undefined;
+    /** Workspace-level endpoints (/accounts, /hosted) take no account_id at all. */
+    workspace?: boolean;
   } = {},
 ): Promise<T> {
   const dsn = ((await env("UNIPILE_DSN")) || "https://api24.unipile.com:15454").replace(/\/$/, "");
@@ -41,7 +45,9 @@ export async function unipile<T>(
     "UNIPILE_API_KEY",
     "Add the current Unipile key to the server environment.",
   );
-  const accountId = await requireEnv("UNIPILE_ACCOUNT_ID");
+  const accountId = options.workspace
+    ? null
+    : options.account || (await requireEnv("UNIPILE_ACCOUNT_ID"));
 
   const headers: Record<string, string> = { "X-API-KEY": key, Accept: "application/json" };
   let body: BodyInit | null = null;
@@ -49,7 +55,7 @@ export async function unipile<T>(
     headers["Content-Type"] = "application/json";
     // Unipile write endpoints expect account_id in the JSON body as well as the query.
     const payload =
-      options.json && typeof options.json === "object" && !Array.isArray(options.json)
+      accountId && options.json && typeof options.json === "object" && !Array.isArray(options.json)
         ? { account_id: accountId, ...(options.json as Record<string, unknown>) }
         : options.json;
     body = JSON.stringify(payload);
@@ -60,7 +66,10 @@ export async function unipile<T>(
   }
 
   const response = await fetch(
-    withQuery(`${dsn}/api/v1${path}`, { account_id: accountId, ...options.query }),
+    withQuery(
+      `${dsn}/api/v1${path}`,
+      accountId ? { account_id: accountId, ...options.query } : { ...options.query },
+    ),
     {
       method: options.method ?? "GET",
       headers,

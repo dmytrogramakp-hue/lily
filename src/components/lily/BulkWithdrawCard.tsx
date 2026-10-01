@@ -14,7 +14,15 @@ const AGE_OPTIONS = [
 const PRESETS = [100, 400, 500];
 const AVG_SECONDS_PER_WITHDRAW = 6.5;
 
-export function BulkWithdrawCard() {
+export function BulkWithdrawCard({
+  account,
+  accountLabel,
+}: {
+  /** Unipile account to withdraw from. Undefined = Dima's default account. */
+  account?: string | undefined;
+  accountLabel?: string | null;
+}) {
+  const acc = account ? { account } : {};
   const qc = useQueryClient();
   const [minAgeDays, setMinAgeDays] = useState(0);
   const [count, setCount] = useState<number>(100);
@@ -28,8 +36,8 @@ export function BulkWithdrawCard() {
   const running = job?.status === "running";
 
   const summary = useQuery({
-    queryKey: ["sent-summary", minAgeDays],
-    queryFn: () => unwrap(getSentSummary({ data: { minAgeDays } })),
+    queryKey: ["sent-summary", account, minAgeDays],
+    queryFn: () => unwrap(getSentSummary({ data: { minAgeDays, ...acc } })),
     staleTime: 60_000,
     refetchInterval: running ? 30_000 : false,
   });
@@ -45,7 +53,7 @@ export function BulkWithdrawCard() {
   const effective = Math.min(count, eligible);
 
   const start = useMutation({
-    mutationFn: () => unwrap(startBulkWithdraw({ data: { count: effective, minAgeDays } })),
+    mutationFn: () => unwrap(startBulkWithdraw({ data: { count: effective, minAgeDays, ...acc } })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
       qc.invalidateQueries({ queryKey: ["sent-summary"] });
@@ -57,7 +65,7 @@ export function BulkWithdrawCard() {
     if (effective < 1) return;
     const minutes = Math.max(1, Math.round((effective * AVG_SECONDS_PER_WITHDRAW) / 60));
     const ok = window.confirm(
-      `Withdraw ${effective.toLocaleString()} pending invite${effective > 1 ? "s" : ""}, oldest first?\n\n` +
+      `Withdraw ${effective.toLocaleString()} pending invite${effective > 1 ? "s" : ""}${accountLabel ? ` from ${accountLabel}'s LinkedIn` : ""}, oldest first?\n\n` +
         `This runs in the background and takes about ${minutes} minute${minutes > 1 ? "s" : ""}. ` +
         "LinkedIn will not let you invite these people again for about 3 weeks.",
     );
