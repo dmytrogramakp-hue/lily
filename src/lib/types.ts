@@ -110,6 +110,8 @@ export type SendingSettings = {
   company_context: string;
   offer: string;
   ai_model: AiModel;
+  /** Script Claude follows for message 1. {first_name} marks where the name goes. */
+  first_message_script?: string;
 };
 
 export type ProfileAnalysis = {

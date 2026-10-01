@@ -36,6 +36,7 @@ function Settings() {
   const [model, setModel] = useState<AiModel>("claude-sonnet-5");
   const [context, setContext] = useState("");
   const [offer, setOffer] = useState("");
+  const [script, setScript] = useState("");
   // Unipile sends people back here after the LinkedIn connect wizard.
   const [linkResult, setLinkResult] = useState<"connected" | "failed" | null>(null);
   useEffect(() => {
@@ -60,14 +61,20 @@ function Settings() {
     setModel(saved.ai_model);
     setContext(saved.company_context);
     setOffer(saved.offer);
-  }, [saved?.ai_model, saved?.company_context, saved?.offer]); // eslint-disable-line react-hooks/exhaustive-deps
+    setScript(saved.first_message_script ?? "");
+  }, [saved?.ai_model, saved?.company_context, saved?.offer, saved?.first_message_script]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const test = useMutation({ mutationFn: () => unwrap(testClaude()) });
   const save = useMutation({
     mutationFn: () =>
       unwrap(
         setSendingSettings({
-          data: { ai_model: model, company_context: context.trim(), offer: offer.trim() },
+          data: {
+            ai_model: model,
+            company_context: context.trim(),
+            offer: offer.trim(),
+            first_message_script: script.trim(),
+          },
         }),
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
@@ -77,7 +84,9 @@ function Settings() {
     !!saved &&
     (saved.ai_model !== model ||
       saved.company_context !== context.trim() ||
-      saved.offer !== offer.trim());
+      saved.offer !== offer.trim() ||
+      (saved.first_message_script ?? "") !== script.trim());
+  const scriptMissingName = script.trim().length > 0 && !script.includes("{first_name}");
 
   return (
     <AppShell
@@ -126,10 +135,33 @@ function Settings() {
             </Card>
 
             <Card className="p-6">
+              <div className="font-semibold text-ink">First message</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                AI-written message 1 follows this script word for word. Claude only puts in the
+                person's first name and may add a few words about their role. Keep {"{first_name}"}{" "}
+                where the name goes. Follow-ups 2 and 3 are written fresh, each with a different
+                piece of value.
+              </p>
+              <textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                rows={4}
+                maxLength={600}
+                className="mt-4 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
+              />
+              <div className="mt-1 flex justify-between text-[11px]">
+                <span className="text-destructive">
+                  {scriptMissingName ? "Add {first_name} where the person's name goes." : ""}
+                </span>
+                <span className="text-muted-foreground">{script.length}/600</span>
+              </div>
+            </Card>
+
+            <Card className="p-6">
               <div className="font-semibold text-ink">Current offer</div>
               <p className="mt-1 text-sm text-muted-foreground">
-                The deal you are running right now. AI messages mention it and close by offering to
-                send the trial link. Connection notes never mention it. Update this when the offer
+                The deal you are running right now. Follow-up messages draw on it when they offer
+                the trial link. Connection notes never mention it. Update this when the offer
                 changes.
               </p>
               <textarea
@@ -215,7 +247,7 @@ function Settings() {
             <Btn
               className="w-full justify-center"
               onClick={() => save.mutate()}
-              disabled={!dirty || save.isPending || !context.trim()}
+              disabled={!dirty || save.isPending || !context.trim() || scriptMissingName}
             >
               {save.isPending ? "Saving" : save.isSuccess && !dirty ? "Saved" : "Save AI settings"}
             </Btn>

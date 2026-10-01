@@ -150,6 +150,7 @@ export const setSendingSettings = createServerFn({ method: "POST" })
       send_weekends: z.boolean().optional(),
       company_context: z.string().max(4000).optional(),
       offer: z.string().max(1500).optional(),
+      first_message_script: z.string().max(600).optional(),
       ai_model: z.enum(["claude-sonnet-5", "claude-opus-5"]).optional(),
     }),
   )
