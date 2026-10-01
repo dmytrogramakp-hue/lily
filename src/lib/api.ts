@@ -7,6 +7,7 @@ import type {
   ConversationSummary,
   Invitation,
   Person,
+  SentSummary,
   UploadResult,
 } from "./types";
 
@@ -316,5 +317,62 @@ export const withdrawInvite = createServerFn({ method: "POST" })
     guard(async () => {
       await unipile(`/users/invite/sent/${encodeURIComponent(data.id)}`, { method: "DELETE" });
       return { ok: true };
+    }),
+  );
+
+/* ---------------------------------------------------------------- bulk withdraw */
+
+const MAX_SENT_SCAN = 5000;
+
+async function listAllSent(): Promise<{ items: USent[]; truncated: boolean }> {
+  const items: USent[] = [];
+  let cursor: string | null | undefined;
+  do {
+    const page: UList<USent> = await unipile<UList<USent>>("/users/invite/sent", {
+      query: { limit: 100, cursor: cursor ?? undefined },
+    });
+    items.push(...(page.items ?? []));
+    cursor = page.cursor;
+  } while (cursor && items.length < MAX_SENT_SCAN);
+  return { items, truncated: !!cursor };
+}
+
+function eligibleOldestFirst(items: USent[], minAgeDays: number) {
+  const cutoff = Date.now() - minAgeDays * 86_400_000;
+  const at = (s: USent) => {
+    const t = s.parsed_datetime ? new Date(s.parsed_datetime).getTime() : NaN;
+    return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+  };
+  return items.filter((s) => minAgeDays <= 0 || at(s) <= cutoff).sort((a, b) => at(a) - at(b));
+}
+
+const ageSchema = z.object({ minAgeDays: z.number().int().min(0).max(365).default(0) });
+
+export const getSentSummary = createServerFn({ method: "GET" })
+  .validator(ageSchema)
+  .handler(({ data }) =>
+    guard(async (): Promise<SentSummary> => {
+      const { items, truncated } = await listAllSent();
+      const eligible = eligibleOldestFirst(items, data.minAgeDays);
+      return {
+        total: items.length,
+        eligible: eligible.length,
+        oldest_at: eligible[0]?.parsed_datetime ?? null,
+        truncated,
+      };
+    }),
+  );
+
+export const startBulkWithdraw = createServerFn({ method: "POST" })
+  .validator(ageSchema.extend({ count: z.number().int().min(1).max(3000) }))
+  .handler(({ data }) =>
+    guard(async () => {
+      const { items } = await listAllSent();
+      const picked = eligibleOldestFirst(items, data.minAgeDays).slice(0, data.count);
+      if (picked.length === 0) throw new Error("No pending invites match. Nothing was withdrawn.");
+      return n8n<{ ok: boolean; queued: number }>("lily-withdraw", {
+        method: "POST",
+        json: { ids: picked.map((p) => p.id), start_total: items.length },
+      });
     }),
   );

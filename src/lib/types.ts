@@ -41,6 +41,24 @@ export type CampaignSummary = {
   daily: DailyActivity[];
   settings: SendingSettings;
   today: { date: string; invites_sent: number };
+  jobs?: { withdraw: WithdrawJob | null };
+};
+
+export type WithdrawJob = {
+  status: "running" | "finished";
+  requested: number;
+  start_total: number | null;
+  started_at?: string;
+  withdrawn?: number;
+  failed?: number;
+  finished_at?: string;
+};
+
+export type SentSummary = {
+  total: number;
+  eligible: number;
+  oldest_at: string | null;
+  truncated: boolean;
 };
 
 export type SendingSettings = { daily_invite_limit: number; send_weekends: boolean };

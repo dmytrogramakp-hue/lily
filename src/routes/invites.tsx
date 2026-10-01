@@ -15,6 +15,7 @@ import {
 } from "@/components/lily/AppShell";
 import { getInvites, respondToInvite, withdrawInvite, unwrap } from "@/lib/api";
 import type { Invitation } from "@/lib/types";
+import { BulkWithdrawCard } from "@/components/lily/BulkWithdrawCard";
 
 export const Route = createFileRoute("/invites")({
   head: () => ({
@@ -90,6 +91,8 @@ function Invites() {
           </button>
         ))}
       </div>
+
+      {tab === "outgoing" && <BulkWithdrawCard />}
 
       {invites.error && (
         <div className="mb-4">
