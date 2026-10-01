@@ -56,6 +56,8 @@ export type CampaignSummary = {
     /** Invites and messages sent today per Unipile account id. */
     by_account?: Record<string, { invites: number; messages: number }>;
   };
+  /** Names of deleted campaigns, reserved so a new campaign cannot reuse them. */
+  deleted_names?: string[];
   /** Account used for unassigned and legacy campaigns (Dima's). */
   default_account?: string;
   jobs?: { withdraw: WithdrawJob | null };

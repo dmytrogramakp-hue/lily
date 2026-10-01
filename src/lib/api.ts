@@ -83,7 +83,8 @@ export const updateCampaign = createServerFn({ method: "POST" })
       name: z.string().trim().min(1).max(120),
       create: z.boolean().optional(),
       status: z.enum(["draft", "active", "paused", "archived"]).optional(),
-      sequence: sequenceSchema.optional(),
+      /** null clears the sequence. */
+      sequence: sequenceSchema.nullable().optional(),
       /** Team member key, or "" to unassign. */
       owner: z
         .string()
@@ -99,6 +100,21 @@ export const updateCampaign = createServerFn({ method: "POST" })
         json: data,
       });
     }),
+  );
+
+/**
+ * Deletes a campaign: it stops sending and disappears from Lily. Leads that were never invited
+ * are removed from the queue so they can go into another campaign; invited leads stay as history.
+ */
+export const deleteCampaign = createServerFn({ method: "POST" })
+  .validator(z.object({ name: z.string().trim().min(1).max(120) }))
+  .handler(({ data }) =>
+    guard(async () =>
+      n8n<{ ok: boolean; name: string; removed_leads: number; kept_invited_leads: number }>(
+        "lily-campaign-status",
+        { method: "POST", json: { name: data.name, delete: true } },
+      ),
+    ),
   );
 
 export const setCampaignStatus = createServerFn({ method: "POST" })

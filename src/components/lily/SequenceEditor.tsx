@@ -143,6 +143,7 @@ export function SequenceEditor({
   locked,
   sender,
   account,
+  active = false,
 }: {
   campaign: string;
   initial: Sequence | null;
@@ -152,6 +153,8 @@ export function SequenceEditor({
   sender?: { name: string; role?: string; first_name?: string } | undefined;
   /** That person's LinkedIn account, used to read lead profiles for previews. */
   account?: string | undefined;
+  /** Running campaigns cannot have their sequence cleared. */
+  active?: boolean;
 }) {
   const qc = useQueryClient();
   const [seq, setSeq] = useState<Sequence>(initial ?? PRESETS[0]!.build());
@@ -172,6 +175,13 @@ export function SequenceEditor({
   const save = useMutation({
     mutationFn: (s: Sequence) => unwrap(updateCampaign({ data: { name: campaign, sequence: s } })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["campaigns"] }),
+  });
+  const clear = useMutation({
+    mutationFn: () => unwrap(updateCampaign({ data: { name: campaign, sequence: null } })),
+    onSuccess: () => {
+      setSeq(PRESETS[0]!.build());
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
+    },
   });
 
   const preview = useMutation({
@@ -657,6 +667,33 @@ export function SequenceEditor({
             {save.error && (
               <div className="mt-3">
                 <ErrorBanner error={save.error} />
+              </div>
+            )}
+            {initial && (
+              <div className="mt-4 border-t pt-3">
+                <button
+                  type="button"
+                  disabled={active || clear.isPending || !!locked}
+                  onClick={() =>
+                    window.confirm(
+                      "Clear this campaign's sequence?\n\nThe connection note and all message steps are removed. Leads and progress stay. You need a new sequence before the campaign can launch again.",
+                    ) && clear.mutate()
+                  }
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {clear.isPending ? "Clearing" : "Clear sequence"}
+                </button>
+                {active && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Pause the campaign to clear its sequence.
+                  </p>
+                )}
+                {clear.error && (
+                  <div className="mt-2">
+                    <ErrorBanner error={clear.error} />
+                  </div>
+                )}
               </div>
             )}
           </Card>

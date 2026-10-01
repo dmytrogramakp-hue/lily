@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Trash2,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -24,6 +25,8 @@ import {
 } from "@/components/lily/AppShell";
 import { useCurrentUser, useTeam } from "@/lib/current-user";
 import { SendingCard } from "@/components/lily/SendingCard";
+import { DeleteCampaignDialog } from "@/components/lily/DeleteCampaignDialog";
+import type { Campaign } from "@/lib/types";
 import { getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { presetLabel } from "@/lib/sequence";
 
@@ -45,6 +48,7 @@ function Campaigns() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [scope, setScope] = useState<"everyone" | "mine">("everyone");
+  const [toDelete, setToDelete] = useState<Campaign | null>(null);
   const { user } = useCurrentUser();
   const { byKey: team, members } = useTeam();
   const campaigns = useQuery({
@@ -265,8 +269,11 @@ function Campaigns() {
                     </td>
                     <td className="px-3 font-semibold text-primary">{c.replied}</td>
                     <td className="px-4 text-right">
-                      {c.status === "active" ? (
-                        <div className="inline-block" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="inline-flex items-center justify-end gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {c.status === "active" && (
                           <Btn
                             variant="outline"
                             onClick={() => pause.mutate(c.name)}
@@ -274,10 +281,22 @@ function Campaigns() {
                           >
                             <Pause className="h-4 w-4" /> Pause
                           </Btn>
-                        </div>
-                      ) : (
-                        <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-                      )}
+                        )}
+                        {c.name !== "Legacy queue" && (
+                          <button
+                            type="button"
+                            onClick={() => setToDelete(c)}
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-destructive-soft hover:text-destructive"
+                            aria-label={`Delete ${c.name}`}
+                            title="Delete campaign"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                        {c.status !== "active" && (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -290,6 +309,13 @@ function Campaigns() {
         Connections, messages and replies are tracked by LinkedIn profile and refresh every hour
         during sending hours. Leads from before Lily are matched against the old outreach tracker.
       </p>
+      {toDelete && (
+        <DeleteCampaignDialog
+          campaign={toDelete}
+          open={!!toDelete}
+          onClose={() => setToDelete(null)}
+        />
+      )}
     </AppShell>
   );
 }

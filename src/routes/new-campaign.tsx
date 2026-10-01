@@ -27,9 +27,9 @@ function NewCampaign() {
     queryFn: () => unwrap(getCampaigns()),
     staleTime: 60_000,
   });
-  const taken = (campaigns.data?.campaigns ?? []).some(
-    (c) => c.name.toLowerCase() === name.trim().toLowerCase(),
-  );
+  const lower = name.trim().toLowerCase();
+  const taken = (campaigns.data?.campaigns ?? []).some((c) => c.name.toLowerCase() === lower);
+  const reserved = (campaigns.data?.deleted_names ?? []).some((n) => n.toLowerCase() === lower);
 
   const create = useMutation({
     mutationFn: () =>
@@ -51,7 +51,11 @@ function NewCampaign() {
   });
 
   const valid =
-    name.trim().length > 0 && name.trim().length <= 120 && !taken && name.trim() !== "Legacy queue";
+    name.trim().length > 0 &&
+    name.trim().length <= 120 &&
+    !taken &&
+    !reserved &&
+    name.trim() !== "Legacy queue";
 
   return (
     <AppShell
@@ -76,6 +80,11 @@ function NewCampaign() {
         />
         {taken && (
           <p className="mt-2 text-xs text-destructive">A campaign with this name already exists.</p>
+        )}
+        {reserved && !taken && (
+          <p className="mt-2 text-xs text-destructive">
+            A deleted campaign used this name. Pick a different one so its old leads stay separate.
+          </p>
         )}
 
         {members.length > 0 && (

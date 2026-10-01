@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Rocket,
   Search,
+  Trash2,
   Upload,
 } from "lucide-react";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/components/lily/AppShell";
 import { LeadUploader } from "@/components/lily/LeadUploader";
 import { SequenceEditor } from "@/components/lily/SequenceEditor";
+import { DeleteCampaignDialog } from "@/components/lily/DeleteCampaignDialog";
 import { getCampaignLeads, getCampaigns, unwrap, updateCampaign } from "@/lib/api";
 import { describeSequence, presetLabel } from "@/lib/sequence";
 import type { Campaign, CampaignLead, LeadStage } from "@/lib/types";
@@ -78,6 +80,8 @@ function CampaignPage() {
   const { byKey: team } = useTeam();
 
   const [tab, setTab] = useState<Tab | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const navigate = useNavigate();
   useEffect(() => {
     if (tab || !c) return;
     if (c.status === "draft" && c.leads === 0) setTab("leads");
@@ -233,20 +237,43 @@ function CampaignPage() {
         />
       )}
 
-      {c.status !== "archived" && c.status !== "legacy" && (
-        <div className="mt-10 border-t pt-4 text-right">
+      {!isLegacyQueue && (
+        <div className="mt-10 flex flex-wrap items-center justify-end gap-4 border-t pt-4">
+          {c.status === "archived" ? (
+            <button
+              onClick={() => status.mutate("paused")}
+              disabled={status.isPending}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <Archive className="h-3.5 w-3.5" /> Restore from archive
+            </button>
+          ) : c.status !== "legacy" ? (
+            <button
+              onClick={() =>
+                window.confirm(
+                  `Archive "${c.name}"? It stops sending and moves to the Archived filter. You can restore it later.`,
+                ) && status.mutate("archived")
+              }
+              disabled={status.isPending}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <Archive className="h-3.5 w-3.5" /> Archive campaign
+            </button>
+          ) : null}
           <button
-            onClick={() =>
-              window.confirm(
-                `Archive "${c.name}"? It stops sending and moves to the Archived filter.`,
-              ) && status.mutate("archived")
-            }
+            onClick={() => setDeleteOpen(true)}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-destructive"
           >
-            <Archive className="h-3.5 w-3.5" /> Archive campaign
+            <Trash2 className="h-3.5 w-3.5" /> Delete campaign
           </button>
         </div>
       )}
+      <DeleteCampaignDialog
+        campaign={c}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => navigate({ to: "/" })}
+      />
     </AppShell>
   );
 }
@@ -699,6 +726,7 @@ function SequenceTab({ campaign: c, locked }: { campaign: Campaign; locked: stri
       locked={locked}
       sender={senderProfile(from.member)}
       account={from.account ?? undefined}
+      active={c.status === "active"}
     />
   );
 }
