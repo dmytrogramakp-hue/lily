@@ -14,6 +14,7 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as InvitesRouteImport } from './routes/invites'
 import { Route as NewCampaignRouteImport } from './routes/new-campaign'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CampaignsNameRouteImport } from './routes/campaigns.$name'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +42,11 @@ const NewCampaignRoute = NewCampaignRouteImport.update({
   path: '/new-campaign',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CampaignsNameRoute = CampaignsNameRouteImport.update({
   id: '/campaigns/$name',
   path: '/campaigns/$name',
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
   '/new-campaign': typeof NewCampaignRoute
+  '/settings': typeof SettingsRoute
   '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
   '/new-campaign': typeof NewCampaignRoute
+  '/settings': typeof SettingsRoute
   '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRoutesById {
@@ -70,6 +78,7 @@ export interface FileRoutesById {
   '/inbox': typeof InboxRoute
   '/invites': typeof InvitesRoute
   '/new-campaign': typeof NewCampaignRoute
+  '/settings': typeof SettingsRoute
   '/campaigns/$name': typeof CampaignsNameRoute
 }
 export interface FileRouteTypes {
@@ -80,6 +89,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/invites'
     | '/new-campaign'
+    | '/settings'
     | '/campaigns/$name'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -88,6 +98,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/invites'
     | '/new-campaign'
+    | '/settings'
     | '/campaigns/$name'
   id:
     | '__root__'
@@ -96,6 +107,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/invites'
     | '/new-campaign'
+    | '/settings'
     | '/campaigns/$name'
   fileRoutesById: FileRoutesById
 }
@@ -105,6 +117,7 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRoute
   InvitesRoute: typeof InvitesRoute
   NewCampaignRoute: typeof NewCampaignRoute
+  SettingsRoute: typeof SettingsRoute
   CampaignsNameRoute: typeof CampaignsNameRoute
 }
 
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewCampaignRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/campaigns/$name': {
       id: '/campaigns/$name'
       path: '/campaigns/$name'
@@ -161,6 +181,7 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRoute,
   InvitesRoute: InvitesRoute,
   NewCampaignRoute: NewCampaignRoute,
+  SettingsRoute: SettingsRoute,
   CampaignsNameRoute: CampaignsNameRoute,
 }
 export const routeTree = rootRouteImport

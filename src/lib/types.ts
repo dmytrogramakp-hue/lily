@@ -62,7 +62,31 @@ export type SentSummary = {
   truncated: boolean;
 };
 
-export type SendingSettings = { daily_invite_limit: number; send_weekends: boolean };
+export type AiModel = "claude-sonnet-5" | "claude-opus-5";
+export type SendingSettings = {
+  daily_invite_limit: number;
+  send_weekends: boolean;
+  company_context: string;
+  ai_model: AiModel;
+};
+
+export type ProfileAnalysis = {
+  role?: string;
+  company?: string;
+  current_focus?: string;
+  best_use_case?: string;
+  angle?: string;
+};
+export type GeneratedText = {
+  ok: boolean;
+  error?: string | null;
+  model: string;
+  text: string;
+  analysis: ProfileAnalysis | null;
+  angle: string | null;
+  issues: string[];
+  profile?: { name: string; headline: string | null; current_role: string | null; posts: number };
+};
 
 export type LeadInput = {
   linkedin_url: string;

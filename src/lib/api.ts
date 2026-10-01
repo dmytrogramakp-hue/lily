@@ -4,6 +4,7 @@ import { n8n, unipile } from "./server/clients";
 import type {
   CampaignLead,
   CampaignSummary,
+  GeneratedText,
   ChatMessage,
   ConversationSummary,
   Invitation,
@@ -110,6 +111,8 @@ export const setSendingSettings = createServerFn({ method: "POST" })
     z.object({
       daily_invite_limit: z.number().int().min(0).max(100).optional(),
       send_weekends: z.boolean().optional(),
+      company_context: z.string().max(4000).optional(),
+      ai_model: z.enum(["claude-sonnet-5", "claude-opus-5"]).optional(),
     }),
   )
   .handler(({ data }) =>
@@ -424,3 +427,142 @@ export const startBulkWithdraw = createServerFn({ method: "POST" })
       });
     }),
   );
+
+/* ---------------------------------------------------------------- AI writer (Claude via n8n) */
+
+type UProfile = {
+  first_name?: string;
+  last_name?: string;
+  headline?: string;
+  summary?: string;
+  location?: string;
+  provider_id?: string;
+  work_experience?: {
+    position?: string;
+    company?: string;
+    description?: string;
+    start?: string;
+    end?: string | null;
+  }[];
+  skills?: ({ name?: string } | string)[];
+};
+type UPost = { text?: string; date?: string; parsed_datetime?: string };
+
+const clipText = (v: unknown, n: number) =>
+  String(v ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, n);
+
+/** Reads a lead's LinkedIn profile and recent posts and compacts them for the prompt. */
+async function profileForAI(linkedinUrl: string) {
+  const m = linkedinUrl.match(/linkedin\.com\/(?:in|pub)\/([^/?#\s]+)/i);
+  if (!m?.[1]) throw new Error("This lead has no valid LinkedIn URL.");
+  const p = await unipile<UProfile>(`/users/${encodeURIComponent(m[1].replace(/\/$/, ""))}`, {
+    query: { linkedin_sections: "*" },
+  });
+  const posts = p.provider_id
+    ? ((
+        await unipile<UList<UPost>>(`/users/${encodeURIComponent(p.provider_id)}/posts`, {
+          query: { limit: 3 },
+        }).catch(() => ({ items: [] as UPost[] }))
+      ).items ?? [])
+    : [];
+  const exp = p.work_experience ?? [];
+  const current = exp.filter((e) => !e.end).slice(0, 2);
+  const past = exp.filter((e) => e.end).slice(0, 3);
+  const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || "LinkedIn member";
+  return {
+    compact: {
+      name,
+      first_name: p.first_name ?? "",
+      last_name: p.last_name ?? "",
+      headline: clipText(p.headline, 300),
+      location: clipText(p.location, 100),
+      about: clipText(p.summary, 1500),
+      current_roles: current.map((e) => ({
+        title: clipText(e.position, 150),
+        company: clipText(e.company, 120),
+        since: e.start ?? null,
+        description: clipText(e.description, 700),
+      })),
+      previous_roles: past.map((e) => ({
+        title: clipText(e.position, 150),
+        company: clipText(e.company, 120),
+      })),
+      skills: (p.skills ?? [])
+        .map((s) => (typeof s === "string" ? s : s.name))
+        .filter(Boolean)
+        .slice(0, 10),
+      recent_posts: posts.map((x) => ({
+        when: x.date ?? x.parsed_datetime ?? null,
+        text: clipText(x.text, 500),
+      })),
+    },
+    summary: {
+      name,
+      headline: p.headline ?? null,
+      current_role: current[0]
+        ? `${current[0].position ?? ""} at ${current[0].company ?? ""}`.trim()
+        : null,
+      posts: posts.length,
+    },
+  };
+}
+
+const stepSchema = z.object({
+  index: z.number().int().min(1).max(3),
+  wait_days: z.number().int().min(0).max(30),
+  instructions: z.string().max(2000).optional(),
+});
+
+async function writer(payload: Record<string, unknown>) {
+  const res = await n8n<GeneratedText>("lily-generate", { method: "POST", json: payload });
+  if (!res.ok) throw new Error(res.error || "Claude could not write this message.");
+  return res;
+}
+
+export const generateForLead = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      lead_url: z.string().min(10).max(400),
+      kind: z.enum(["invite_note", "message"]),
+      step: stepSchema,
+      previous_message: z.string().max(2000).optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async (): Promise<GeneratedText> => {
+      const profile = await profileForAI(data.lead_url);
+      const res = await writer({
+        mode: "message",
+        kind: data.kind,
+        step: data.step,
+        profile: profile.compact,
+        previous_message: data.previous_message,
+      });
+      return { ...res, profile: profile.summary };
+    }),
+  );
+
+export const draftTemplate = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      kind: z.enum(["invite_note", "message"]),
+      step: stepSchema,
+      audience: z
+        .array(z.object({ title: z.string().max(200), company: z.string().max(200) }))
+        .max(20),
+      previous_message: z.string().max(2000).optional(),
+    }),
+  )
+  .handler(({ data }) => guard(async () => writer({ mode: "template", ...data })));
+
+export const testClaude = createServerFn({ method: "GET" }).handler(() =>
+  guard(async () =>
+    n8n<{ ok: boolean; model: string; reply: string }>("lily-generate", {
+      method: "POST",
+      json: { mode: "ping" },
+    }),
+  ),
+);

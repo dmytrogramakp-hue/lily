@@ -8,6 +8,7 @@ import {
   UserPlus,
   MessagesSquare,
   BarChart3,
+  Settings,
   AlertTriangle,
   Loader2,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const nav = [
   { to: "/invites", label: "Invites", icon: UserPlus },
   { to: "/inbox", label: "Inbox", icon: MessagesSquare },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function AppShell({

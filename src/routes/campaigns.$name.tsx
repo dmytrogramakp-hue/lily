@@ -568,8 +568,12 @@ function SequenceTab({ campaign: c, locked }: { campaign: Campaign; locked: stri
     staleTime: 60_000,
     enabled: c.leads > 0,
   });
-  const sample = leads.data?.leads.find((l) => l.first_name && l.company);
   return (
-    <SequenceEditor campaign={c.name} initial={c.sequence} sampleLead={sample} locked={locked} />
+    <SequenceEditor
+      campaign={c.name}
+      initial={c.sequence}
+      leads={leads.data?.leads ?? []}
+      locked={locked}
+    />
   );
 }
