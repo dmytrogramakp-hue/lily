@@ -11,7 +11,9 @@ export type Campaign = {
   accepted: number;
   msg1: number;
   msg2: number;
+  msg3?: number;
   replied: number;
+  needs_review?: number;
   last_invite_at: string | null;
   created_at: string | null;
   source_file: string | null;
@@ -24,6 +26,7 @@ export type DailyActivity = {
   invites: number;
   msg1: number;
   msg2: number;
+  msg3?: number;
   replied: number;
 };
 
@@ -37,11 +40,13 @@ export type CampaignSummary = {
     connected: number;
     msg1: number;
     msg2: number;
+    msg3?: number;
     replied: number;
+    needs_review?: number;
   };
   daily: DailyActivity[];
   settings: SendingSettings;
-  today: { date: string; invites_sent: number };
+  today: { date: string; invites_sent: number; messages_sent?: number };
   jobs?: { withdraw: WithdrawJob | null };
 };
 
@@ -151,7 +156,16 @@ export type Sequence = {
 };
 
 export type LeadStage =
-  "queued" | "invited" | "connected" | "message_1" | "message_2" | "replied" | "skipped";
+  | "queued"
+  | "invited"
+  | "connected"
+  | "message_1"
+  | "message_2"
+  | "message_3"
+  | "replied"
+  | "needs_review"
+  | "stopped"
+  | "skipped";
 export type CampaignLead = {
   linkedin_url: string;
   first_name: string;
@@ -161,5 +175,11 @@ export type CampaignLead = {
   stage: LeadStage;
   invite_sent_at: string | null;
   added_at: string | null;
+  /** When LinkedIn shows the connection was accepted (set by the message sender). */
+  connected_at?: string | null;
+  last_message_at?: string | null;
+  /** Madrid calendar date the next message is scheduled for, from the campaign's wait_days. */
+  next_message_on?: string | null;
+  next_message_step?: number | null;
   note: string;
 };

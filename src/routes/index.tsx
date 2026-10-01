@@ -256,8 +256,8 @@ function Campaigns() {
         )}
       </Card>
       <p className="mt-3 text-xs text-muted-foreground">
-        Connected and reply numbers per campaign are matched by name against the outreach tracker,
-        so they can lag for leads with missing names.
+        Connections, messages and replies are tracked by LinkedIn profile and refresh every hour
+        during sending hours. Leads from before Lily are matched against the old outreach tracker.
       </p>
     </AppShell>
   );

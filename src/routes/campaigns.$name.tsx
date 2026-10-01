@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -46,10 +46,23 @@ const STAGES: { id: LeadStage | "all"; label: string; tone: string }[] = [
   { id: "connected", label: "Connected", tone: "bg-success-soft text-success" },
   { id: "message_1", label: "Message 1 sent", tone: "bg-ink/10 text-ink" },
   { id: "message_2", label: "Message 2 sent", tone: "bg-ink/10 text-ink" },
+  { id: "message_3", label: "Message 3 sent", tone: "bg-ink/10 text-ink" },
   { id: "replied", label: "Replied", tone: "bg-success text-primary-foreground" },
+  { id: "needs_review", label: "Needs review", tone: "bg-warning-soft text-warning" },
+  { id: "stopped", label: "Stopped", tone: "bg-muted text-muted-foreground" },
   { id: "skipped", label: "Skipped", tone: "bg-destructive-soft text-destructive" },
 ];
 const stageMeta = (s: LeadStage) => STAGES.find((x) => x.id === s) ?? STAGES[1]!;
+
+/** Next scheduled message as a short Madrid date, or "Due now" when the date has passed. */
+function nextMessageLabel(l: CampaignLead): string {
+  if (!l.next_message_on) return "–";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+  const step = l.next_message_step ? `Msg ${l.next_message_step}, ` : "";
+  if (l.next_message_on <= today) return `${step}due now`;
+  const d = new Date(`${l.next_message_on}T12:00:00Z`);
+  return `${step}${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}`;
+}
 
 function CampaignPage() {
   const { name } = Route.useParams();
@@ -311,6 +324,7 @@ function Overview({
     { label: "Connected", v: c.accepted },
     { label: "Message 1", v: c.msg1 },
     { label: "Message 2", v: c.msg2 },
+    ...(c.msg3 ? [{ label: "Message 3", v: c.msg3 }] : []),
     { label: "Replied", v: c.replied },
   ];
   const lines = describeSequence(c.sequence);
@@ -490,41 +504,64 @@ function LeadsTab({ campaign: c, locked }: { campaign: Campaign; locked: boolean
                     <th className="px-3 py-2.5">Company</th>
                     <th className="px-3 py-2.5">Stage</th>
                     <th className="px-3 py-2.5">Invited</th>
+                    <th className="px-3 py-2.5">Next message</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shown.map((l: CampaignLead) => {
                     const m = stageMeta(l.stage);
                     return (
-                      <tr key={l.linkedin_url} className="border-t">
-                        <td className="px-4 py-2.5">
-                          <a
-                            href={l.linkedin_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 font-medium text-ink hover:text-primary"
+                      <Fragment key={l.linkedin_url}>
+                        <tr className="border-t">
+                          <td className="px-4 py-2.5">
+                            <a
+                              href={l.linkedin_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 font-medium text-ink hover:text-primary"
+                            >
+                              {[l.first_name, l.last_name].filter(Boolean).join(" ") ||
+                                l.linkedin_url.replace(
+                                  /^https?:\/\/(www\.)?linkedin\.com\/in\//,
+                                  "",
+                                )}
+                              <ExternalLink className="h-3 w-3 opacity-50" />
+                            </a>
+                          </td>
+                          <td className="max-w-[280px] truncate px-3 py-2.5 text-muted-foreground">
+                            {l.title || "–"}
+                          </td>
+                          <td className="px-3 py-2.5">{l.company || "–"}</td>
+                          <td className="px-3 py-2.5">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.tone}`}
+                              title={l.note || undefined}
+                            >
+                              {m.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                            {l.invite_sent_at ? `${timeAgo(l.invite_sent_at)} ago` : "–"}
+                          </td>
+                          <td
+                            className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground"
+                            title={
+                              l.connected_at
+                                ? `Accepted ${new Date(l.connected_at).toLocaleDateString("en-GB")}`
+                                : undefined
+                            }
                           >
-                            {[l.first_name, l.last_name].filter(Boolean).join(" ") ||
-                              l.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, "")}
-                            <ExternalLink className="h-3 w-3 opacity-50" />
-                          </a>
-                        </td>
-                        <td className="max-w-[280px] truncate px-3 py-2.5 text-muted-foreground">
-                          {l.title || "–"}
-                        </td>
-                        <td className="px-3 py-2.5">{l.company || "–"}</td>
-                        <td className="px-3 py-2.5">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${m.tone}`}
-                            title={l.note || undefined}
-                          >
-                            {m.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                          {l.invite_sent_at ? `${timeAgo(l.invite_sent_at)} ago` : "–"}
-                        </td>
-                      </tr>
+                            {nextMessageLabel(l)}
+                          </td>
+                        </tr>
+                        {l.stage === "needs_review" && l.note && (
+                          <tr className="bg-warning-soft/40">
+                            <td colSpan={6} className="px-4 pb-2.5 pt-0 text-xs text-warning">
+                              {l.note}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

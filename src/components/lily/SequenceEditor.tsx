@@ -652,10 +652,24 @@ export function SequenceEditor({
             )}
           </Card>
           {messages.length > 0 && (
-            <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-xs text-warning">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Message steps are saved with the campaign. They start sending once message sending is
-              switched on for your account. It is off right now, so only connection requests go out.
+            <div className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary-soft px-4 py-3 text-xs leading-relaxed text-ink">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <div className="space-y-1.5">
+                <p>
+                  <span className="font-semibold">How the timing works.</span> Lily checks for new
+                  connections every hour from 9:20 to 17:20 Madrid time, Monday to Friday unless
+                  weekend sending is on. Message 1 goes out the set number of days after the day
+                  they accept. Each follow-up goes out the set number of days after the previous
+                  message. Days are calendar days, so 3 days after a Monday acceptance means
+                  Thursday morning.
+                </p>
+                <p>
+                  Any reply from the lead stops the sequence. AI messages that fail the tone check
+                  are held under Needs review instead of being sent. If you add messages to a
+                  running campaign, people who already accepted get message 1 once their wait has
+                  passed.
+                </p>
+              </div>
             </div>
           )}
         </div>

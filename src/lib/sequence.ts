@@ -64,9 +64,11 @@ export function describeSequence(seq: Sequence | null | undefined): string[] {
     const when =
       i === 0
         ? m.wait_days === 0
-          ? "as soon as they accept"
+          ? "within the hour after they accept"
           : `${m.wait_days} day${m.wait_days > 1 ? "s" : ""} after they accept`
-        : `${m.wait_days} day${m.wait_days > 1 ? "s" : ""} later if no reply`;
+        : m.wait_days === 0
+          ? "right after the previous message if no reply"
+          : `${m.wait_days} day${m.wait_days > 1 ? "s" : ""} after the previous message if no reply`;
     lines.push(
       `Message ${i + 1}, ${when}, ${m.mode === "ai" ? "written by AI for each lead" : "from your template"}`,
     );
