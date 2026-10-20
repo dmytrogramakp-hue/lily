@@ -67,7 +67,9 @@ function Campaigns() {
     () =>
       (data?.campaigns ?? []).filter(
         (c) =>
-          (filter === "all" ? c.status !== "archived" : c.status === filter) &&
+          (filter === "all"
+            ? c.status !== "archived" && c.status !== "legacy"
+            : c.status === filter) &&
           (scope === "everyone" || (!!user && c.owner === user.key)),
       ),
     [data, filter, scope, user],

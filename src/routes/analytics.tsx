@@ -17,6 +17,10 @@ export const Route = createFileRoute("/analytics")({
 });
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+const fmtDay = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const fmtRange = (from: string, to: string | null) =>
+  to && to !== from ? `${fmtDay(from)} to ${fmtDay(to)}` : fmtDay(from);
 
 function Analytics() {
   const q = useQuery({
@@ -38,10 +42,14 @@ function Analytics() {
         { label: "Replied", v: t.replied },
       ]
     : [];
-  const campaigns = (d?.campaigns ?? []).filter((c) => c.leads > 0);
+  const campaigns = (d?.campaigns ?? []).filter((c) => c.leads > 0 && c.status !== "legacy");
+  const old = d?.before_lily;
 
   return (
-    <AppShell title="Analytics" subtitle="Last 14 days of activity, plus all-time conversion.">
+    <AppShell
+      title="Analytics"
+      subtitle="Campaigns run through Lily only. Last 14 days of activity, plus all-time conversion."
+    >
       {q.error && (
         <div className="mb-4">
           <ErrorBanner error={q.error} />
@@ -160,6 +168,16 @@ function Analytics() {
               </table>
             </div>
           </Card>
+
+          {old && (old.invited > 0 || old.tracker_connections > 0) && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Not counted above: {old.invited.toLocaleString()} invites sent by the earlier invite
+              automation{old.invites_from ? ` (${fmtRange(old.invites_from, old.invites_to)})` : ""}{" "}
+              and {old.tracker_connections.toLocaleString()} connections from the CatchAll drip
+              {old.tracker_from ? ` (${fmtRange(old.tracker_from, old.tracker_to)})` : ""}. Those
+              leads stay in the queue so nobody is invited twice.
+            </p>
+          )}
         </>
       )}
     </AppShell>

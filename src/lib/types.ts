@@ -45,6 +45,16 @@ export type CampaignSummary = {
     replied: number;
     needs_review?: number;
   };
+  /** Activity from before Lily (old invite automation and the March 2026 CatchAll drip). Not part of totals. */
+  before_lily?: {
+    leads: number;
+    invited: number;
+    invites_from: string | null;
+    invites_to: string | null;
+    tracker_connections: number;
+    tracker_from: string | null;
+    tracker_to: string | null;
+  };
   daily: DailyActivity[];
   settings: SendingSettings;
   /** Everyone who can be picked as "who is using Lily" and assigned as a campaign owner. */
