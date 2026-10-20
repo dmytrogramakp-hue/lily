@@ -207,6 +207,17 @@ export type ConversationSummary = {
 
 export type ChatMessage = { id: string; text: string; at: string | null; from_me: boolean };
 
+/** How Claude read the latest message from the other person in a thread. */
+export type TriageLabel =
+  "positive" | "question" | "later" | "decline" | "out_of_office" | "vendor" | "other";
+export type TriageResult = {
+  label: TriageLabel;
+  reason: string;
+  /** Suggested reply in the sender's voice, empty when no reply is wanted. Never sent on its own. */
+  reply: string;
+  last_id: string | null;
+};
+
 export type Invitation = {
   id: string;
   direction: "incoming" | "outgoing";

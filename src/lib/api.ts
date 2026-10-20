@@ -20,6 +20,8 @@ import type {
   SentSummary,
   TeamMember,
   UploadResult,
+  TriageLabel,
+  TriageResult,
 } from "./types";
 
 /* ---------------------------------------------------------------- result envelope */
@@ -692,6 +694,65 @@ export const draftTemplate = createServerFn({ method: "POST" })
     }),
   )
   .handler(({ data }) => guard(async () => writer({ mode: "template", ...data })));
+
+/**
+ * Reads a thread and asks Claude how to handle the latest message from the other person:
+ * a label plus a suggested reply in the sender's voice. The reply is only ever a draft for the composer.
+ */
+export const triageThread = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      chatId: z.string().min(1).max(200),
+      account: accountSchema,
+      sender: senderSchema,
+      campaign: z.string().max(120).optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async (): Promise<TriageResult> => {
+      const [person, messages] = await Promise.all([
+        attendeeOf(data.chatId, data.account),
+        unipile<UList<UMessage>>(`/chats/${encodeURIComponent(data.chatId)}/messages`, {
+          query: { limit: 20 },
+          account: data.account,
+        }),
+      ]);
+      const list = (messages.items ?? [])
+        .map(toMessage)
+        .sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+      const last = list[list.length - 1];
+      if (!last || last.from_me) {
+        return {
+          label: "other",
+          reason: "The last message is yours.",
+          reply: "",
+          last_id: last?.id ?? null,
+        };
+      }
+      const res = await n8n<{
+        ok: boolean;
+        error?: string;
+        label?: TriageLabel;
+        reason?: string;
+        reply?: string;
+      }>("lily-generate", {
+        method: "POST",
+        json: {
+          mode: "triage",
+          sender: data.sender,
+          lead: { name: person.name, headline: person.headline, campaign: data.campaign },
+          thread: list.map((m) => ({ from_me: m.from_me, text: m.text })),
+        },
+      });
+      if (!res.ok) throw new Error(res.error || "Claude could not read this thread.");
+      return {
+        label: res.label ?? "other",
+        reason: res.reason ?? "",
+        reply: res.reply ?? "",
+        last_id: last.id,
+      };
+    }),
+  );
 
 /* ---------------------------------------------------------------- LinkedIn accounts per team member */
 

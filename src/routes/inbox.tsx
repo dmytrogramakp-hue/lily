@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, RefreshCw, Send } from "lucide-react";
 import {
@@ -13,7 +13,8 @@ import {
   initialsOf,
   timeAgo,
 } from "@/components/lily/AppShell";
-import { getInbox, getThread, sendMessage, unwrap } from "@/lib/api";
+import { getInbox, getThread, sendMessage, triageThread, unwrap } from "@/lib/api";
+import type { TriageLabel, TriageResult } from "@/lib/types";
 import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
 
 export const Route = createFileRoute("/inbox")({
@@ -28,11 +29,53 @@ export const Route = createFileRoute("/inbox")({
 
 const FILTERS = ["All", "Needs reply", "Unread"] as const;
 
+/* Claude reads every thread that is waiting on us and labels it. Results are kept per browser,
+   keyed by the thread and the time of its last message, so a thread is read once per new message. */
+const TRIAGE_KEY = "lily.triage.v1";
+type Cached = TriageResult & { at: string | null };
+const readTriageCache = (): Record<string, Cached> => {
+  try {
+    return JSON.parse(localStorage.getItem(TRIAGE_KEY) || "{}") as Record<string, Cached>;
+  } catch {
+    return {};
+  }
+};
+const LABEL_ORDER: Record<TriageLabel, number> = {
+  positive: 0,
+  question: 1,
+  later: 2,
+  other: 3,
+  decline: 4,
+  vendor: 5,
+  out_of_office: 6,
+};
+const LABEL_TEXT: Record<TriageLabel, string> = {
+  positive: "Interested",
+  question: "Question",
+  later: "Later",
+  decline: "Declined",
+  out_of_office: "Out of office",
+  vendor: "Vendor",
+  other: "Needs reply",
+};
+const LABEL_TONE: Record<TriageLabel, string> = {
+  positive: "bg-success-soft text-success",
+  question: "bg-primary-soft text-primary",
+  later: "bg-warning-soft text-warning",
+  other: "bg-warning-soft text-warning",
+  decline: "bg-muted text-muted-foreground",
+  vendor: "bg-muted text-muted-foreground",
+  out_of_office: "bg-muted text-muted-foreground",
+};
+
 function Inbox() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
   const [active, setActive] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [triage, setTriage] = useState<Record<string, Cached>>(() => readTriageCache());
+  const [triaging, setTriaging] = useState<Record<string, boolean>>({});
+  const inFlight = useRef(new Set<string>());
   const bottom = useRef<HTMLDivElement>(null);
   const choice = useAccountChoice();
   const account = choice.account;
@@ -47,6 +90,14 @@ function Inbox() {
   const conversations = (inbox.data?.conversations ?? []).filter((c) =>
     filter === "All" ? true : filter === "Unread" ? c.unread > 0 : c.last_from_me === false,
   );
+  if (filter === "Needs reply") {
+    conversations.sort(
+      (a, b) =>
+        LABEL_ORDER[triage[a.chat_id]?.label ?? "other"] -
+          LABEL_ORDER[triage[b.chat_id]?.label ?? "other"] ||
+        String(b.last_at ?? "").localeCompare(String(a.last_at ?? "")),
+    );
+  }
   const activeId = active ?? conversations[0]?.chat_id ?? null;
   const summary = (inbox.data?.conversations ?? []).find((c) => c.chat_id === activeId) ?? null;
 
@@ -71,6 +122,74 @@ function Inbox() {
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [thread.data]);
+
+  const memberKey = choice.member?.key;
+  const memberName = choice.member?.name;
+  const memberRole = choice.member?.role;
+  const runTriage = useCallback(
+    async (chatId: string, at: string | null) => {
+      if (inFlight.current.has(chatId)) return;
+      inFlight.current.add(chatId);
+      setTriaging((t) => ({ ...t, [chatId]: true }));
+      try {
+        const sender = memberName
+          ? {
+              name: memberName,
+              ...(memberRole ? { role: memberRole } : {}),
+              first_name: memberName.split(" ")[0]!,
+            }
+          : undefined;
+        const r = await unwrap(
+          triageThread({
+            data: { chatId, ...(account ? { account } : {}), ...(sender ? { sender } : {}) },
+          }),
+        );
+        setTriage((m) => {
+          const next = { ...m, [chatId]: { ...r, at } };
+          try {
+            localStorage.setItem(TRIAGE_KEY, JSON.stringify(next));
+          } catch {
+            /* per-browser convenience only */
+          }
+          return next;
+        });
+      } catch {
+        /* stays "Needs reply"; the thread itself is unaffected */
+      } finally {
+        inFlight.current.delete(chatId);
+        setTriaging((t) => {
+          const n = { ...t };
+          delete n[chatId];
+          return n;
+        });
+      }
+    },
+    [account, memberKey, memberName, memberRole], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // Read the threads waiting on us, two at a time, newest first. Nothing is sent.
+  useEffect(() => {
+    const waiting = (inbox.data?.conversations ?? [])
+      .filter((c) => c.last_from_me === false)
+      .slice(0, 20)
+      .filter((c) => {
+        const cached = triage[c.chat_id];
+        return (!cached || cached.at !== c.last_at) && !inFlight.current.has(c.chat_id);
+      });
+    if (waiting.length === 0) return undefined;
+    let cancelled = false;
+    const queue = [...waiting];
+    const worker = async () => {
+      while (!cancelled && queue.length) {
+        const c = queue.shift()!;
+        await runTriage(c.chat_id, c.last_at);
+      }
+    };
+    void Promise.all([worker(), worker()]);
+    return () => {
+      cancelled = true;
+    };
+  }, [inbox.data, runTriage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
     const text = draft.trim();
@@ -154,11 +273,22 @@ function Inbox() {
                       {x.last_from_me ? "You: " : ""}
                       {x.last_text || "No messages yet"}
                     </div>
-                    {x.last_from_me === false && (
-                      <span className="mt-1.5 inline-block rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold text-warning">
-                        Needs reply
-                      </span>
-                    )}
+                    {x.last_from_me === false &&
+                      (() => {
+                        const t = triage[x.chat_id];
+                        const label = t && t.at === x.last_at ? t.label : null;
+                        return (
+                          <span
+                            className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${label ? LABEL_TONE[label] : "bg-warning-soft text-warning"}`}
+                          >
+                            {label
+                              ? LABEL_TEXT[label]
+                              : triaging[x.chat_id]
+                                ? "Reading"
+                                : "Needs reply"}
+                          </span>
+                        );
+                      })()}
                   </div>
                   {x.unread > 0 && (
                     <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
@@ -229,6 +359,49 @@ function Inbox() {
                     <ErrorBanner error={send.error} />
                   </div>
                 )}
+                {summary?.last_from_me === false &&
+                  (() => {
+                    const t = triage[activeId];
+                    const fresh = t && t.at === summary.last_at ? t : null;
+                    return (
+                      <div className="mb-2 rounded-xl border bg-primary-soft p-3 text-sm">
+                        {fresh ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${LABEL_TONE[fresh.label]}`}
+                              >
+                                {LABEL_TEXT[fresh.label]}
+                              </span>
+                              <span className="text-xs text-muted-foreground">{fresh.reason}</span>
+                              <button
+                                type="button"
+                                className="ml-auto text-xs font-medium text-primary disabled:opacity-50"
+                                disabled={!!triaging[activeId]}
+                                onClick={() => void runTriage(activeId, summary.last_at)}
+                              >
+                                {triaging[activeId] ? "Reading" : "Read again"}
+                              </button>
+                            </div>
+                            {fresh.reply && (
+                              <div className="mt-2 flex items-start gap-2">
+                                <div className="min-w-0 flex-1 whitespace-pre-wrap rounded-lg border bg-card px-3 py-2 text-sm">
+                                  {fresh.reply}
+                                </div>
+                                <Btn variant="outline" onClick={() => setDraft(fresh.reply)}>
+                                  Use reply
+                                </Btn>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">
+                            {triaging[activeId] ? "Claude is reading this reply" : "Not read yet"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 <div className="flex items-end gap-2 rounded-xl border bg-card p-2">
                   <textarea
                     value={draft}
