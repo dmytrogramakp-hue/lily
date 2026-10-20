@@ -17,6 +17,7 @@ import {
 import { Avatar, Btn, Card, ErrorBanner, initialsOf } from "@/components/lily/AppShell";
 import {
   createLinkedInConnectLink,
+  getCampaigns,
   getLinkedInAccounts,
   linkLinkedInAccount,
   removeTeamMember,
@@ -25,10 +26,19 @@ import {
   unwrap,
 } from "@/lib/api";
 import { useCurrentUser, useTeam } from "@/lib/current-user";
+import { levelTone, usePendingInvites } from "@/components/lily/PendingInvites";
 import type { Campaign, LinkedInAccount, TeamMember } from "@/lib/types";
 
-type Draft = { key?: string; name: string; role: string; email: string; calendar_link: string };
-const EMPTY: Draft = { name: "", role: "", email: "", calendar_link: "" };
+type Draft = {
+  key?: string;
+  name: string;
+  role: string;
+  email: string;
+  calendar_link: string;
+  /** Text field: empty = team default. */
+  daily_invite_limit: string;
+};
+const EMPTY: Draft = { name: "", role: "", email: "", calendar_link: "", daily_invite_limit: "" };
 
 /**
  * Team members share the one Lily login. Each person connects their own LinkedIn through
@@ -38,6 +48,15 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
   const qc = useQueryClient();
   const { members } = useTeam();
   const { user, setUser } = useCurrentUser();
+  const { rows: pendingRows } = usePendingInvites();
+  const pendingByAccount = new Map(pendingRows.map((r) => [r.account, r.stats]));
+  const summary = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => unwrap(getCampaigns()),
+    staleTime: 60_000,
+  });
+  const teamLimit = summary.data?.settings.daily_invite_limit ?? 20;
+  const limitText = draftLimitText;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
 
@@ -80,6 +99,8 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
             role: d.role.trim(),
             email: d.email.trim(),
             calendar_link: d.calendar_link.trim(),
+            daily_invite_limit:
+              d.daily_invite_limit.trim() === "" ? null : Number(d.daily_invite_limit),
           },
         }),
       ),
@@ -151,6 +172,10 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
                       role: m.role,
                       email: m.email,
                       calendar_link: m.calendar_link ?? "",
+                      daily_invite_limit:
+                        m.daily_invite_limit === null || m.daily_invite_limit === undefined
+                          ? ""
+                          : String(m.daily_invite_limit),
                     })
                   }
                   className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -179,6 +204,22 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
                   <UserMinus className="h-4 w-4" />
                 </button>
               </div>
+              {m.unipile_account_id && (
+                <div className="ml-11 mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{limitText(m.daily_invite_limit, teamLimit)}</span>
+                  {(() => {
+                    const p = pendingByAccount.get(m.unipile_account_id);
+                    if (!p) return null;
+                    const tone = levelTone(p.level);
+                    return (
+                      <span className={tone.text}>
+                        {p.count.toLocaleString()} pending invites
+                        {p.level ? ` (${tone.label.toLowerCase()})` : ""}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
               <LinkedInRow
                 member={m}
                 account={m.unipile_account_id ? accountById.get(m.unipile_account_id) : undefined}
@@ -232,6 +273,17 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
                 className="w-full rounded-lg border bg-card px-3 py-2 text-sm"
               />
             </Field>
+            <Field label="Invites per day">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={draft.daily_invite_limit}
+                onChange={(e) => setDraft({ ...draft, daily_invite_limit: e.target.value })}
+                placeholder={`Team default (${teamLimit})`}
+                className="w-full rounded-lg border bg-card px-3 py-2 text-sm"
+              />
+            </Field>
             <Field label="Calendar link">
               <input
                 type="url"
@@ -245,10 +297,19 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             The calendar link fills {"{{calendar_link}}"} in this person's template messages. The
-            role is how Claude introduces them.
+            role is how Claude introduces them. Leave invites per day empty to use the team default;
+            use a lower number for the first weeks on a newly connected account.
           </p>
           <div className="mt-4 flex items-center gap-2">
-            <Btn type="submit" disabled={!draft.name.trim() || save.isPending}>
+            <Btn
+              type="submit"
+              disabled={
+                !draft.name.trim() ||
+                save.isPending ||
+                (draft.daily_invite_limit.trim() !== "" &&
+                  !/^(100|[1-9]?\d)$/.test(draft.daily_invite_limit.trim()))
+              }
+            >
               {save.isPending ? "Saving" : draft.key ? "Save changes" : "Add to team"}
             </Btn>
             <Btn variant="ghost" onClick={() => setDraft(null)} disabled={save.isPending}>
@@ -269,6 +330,12 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
       )}
     </Card>
   );
+}
+
+function draftLimitText(own: number | null | undefined, teamLimit: number) {
+  return own === null || own === undefined
+    ? `${teamLimit} invites a day (team default)`
+    : `${own} invites a day (own limit)`;
 }
 
 function LinkedInRow({

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, RefreshCw, X } from "lucide-react";
 import {
@@ -17,8 +17,19 @@ import { getInvites, respondToInvite, withdrawInvite, unwrap } from "@/lib/api";
 import type { Invitation } from "@/lib/types";
 import { BulkWithdrawCard } from "@/components/lily/BulkWithdrawCard";
 import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
+import { PendingInvitesPanel } from "@/components/lily/PendingInvites";
+
+type InvitesSearch = { member?: string; tab?: "incoming" | "outgoing" };
 
 export const Route = createFileRoute("/invites")({
+  validateSearch: (s: Record<string, unknown>): InvitesSearch => {
+    const member = s["member"];
+    const tab = s["tab"];
+    return {
+      ...(typeof member === "string" && /^[a-z0-9-]{1,60}$/.test(member) ? { member } : {}),
+      ...(tab === "outgoing" || tab === "incoming" ? { tab } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Invites · Lily" },
@@ -35,9 +46,13 @@ type Outcome = "accepted" | "ignored" | "withdrawn";
 
 function Invites() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"incoming" | "outgoing">("incoming");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<"incoming" | "outgoing">(search.tab ?? "incoming");
   const [done, setDone] = useState<Record<string, Outcome>>({});
-  const choice = useAccountChoice();
+  const choice = useAccountChoice(search.member);
+  useEffect(() => {
+    if (search.tab) setTab(search.tab);
+  }, [search.tab]);
   const account = choice.account;
   const acc = account ? { account } : {};
   const invites = useQuery({
@@ -112,6 +127,7 @@ function Invites() {
         ))}
       </div>
 
+      {tab === "outgoing" && <PendingInvitesPanel className="mb-4" />}
       {tab === "outgoing" && (
         <BulkWithdrawCard account={account} accountLabel={choice.member?.name ?? null} />
       )}

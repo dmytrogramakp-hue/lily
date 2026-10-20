@@ -56,6 +56,12 @@ export type CampaignSummary = {
     /** Invites and messages sent today per Unipile account id. */
     by_account?: Record<string, { invites: number; messages: number }>;
   };
+  /** Pending invites per Unipile account id, from the hourly monitor. */
+  pending_invites?: {
+    checked_at: string;
+    thresholds: number[];
+    accounts: Record<string, PendingInviteStats>;
+  } | null;
   /** Names of deleted campaigns, reserved so a new campaign cannot reuse them. */
   deleted_names?: string[];
   /** Account used for unassigned and legacy campaigns (Dima's). */
@@ -76,6 +82,21 @@ export type TeamMember = {
   linkedin_connected_at?: string;
   /** Used for {{calendar_link}} in this person's template messages. */
   calendar_link?: string;
+  /** Invites per day from this person's LinkedIn. null = the team default. */
+  daily_invite_limit?: number | null;
+};
+
+/** Pending (sent, not yet accepted) LinkedIn invites for one account, refreshed hourly on weekdays. */
+export type PendingInviteStats = {
+  member_key: string;
+  member_name: string;
+  count: number;
+  older_than_14d: number;
+  older_than_21d: number;
+  oldest_at: string | null;
+  /** 0, 300, 400 or 500: the highest alert threshold reached. */
+  level: number;
+  error: string | null;
 };
 
 /** A LinkedIn account in the Unipile workspace. status "OK" means it can send. */
@@ -103,7 +124,8 @@ export type SentSummary = {
   truncated: boolean;
 };
 
-export type AiModel = "claude-sonnet-5" | "claude-opus-5";
+export type AiModel =
+  "claude-sonnet-5-5" | "claude-opus-5-5" | "claude-haiku-5-5" | "claude-fable-5-1";
 export type SendingSettings = {
   daily_invite_limit: number;
   send_weekends: boolean;

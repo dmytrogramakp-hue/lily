@@ -12,16 +12,29 @@ export const Route = createFileRoute("/settings")({
   component: Settings,
 });
 
+// Prices are per million tokens (input / output). A message costs roughly 2,500 input and
+// 1,000 output tokens, so even the most expensive model stays well under 10 cents per message.
 const MODELS: { id: AiModel; label: string; detail: string }[] = [
   {
-    id: "claude-sonnet-5",
-    label: "Claude Sonnet 5",
-    detail: "Recommended. Fast, strong writing, lower cost per message.",
+    id: "claude-opus-5-5",
+    label: "Claude Opus 5.5",
+    detail:
+      "Recommended. Most specific follow-ups for each profile. About 15 s per message, $4 / $20.",
   },
   {
-    id: "claude-opus-5",
-    label: "Claude Opus 5",
-    detail: "Highest quality reasoning about each profile. Slower and pricier.",
+    id: "claude-sonnet-5-5",
+    label: "Claude Sonnet 5.5",
+    detail: "Fast and solid writing. About 10 s per message, $2 / $10.",
+  },
+  {
+    id: "claude-fable-5-1",
+    label: "Claude Fable 5.1",
+    detail: "Anthropic's most capable model. Similar output to Opus here, slower, $10 / $50.",
+  },
+  {
+    id: "claude-haiku-5-5",
+    label: "Claude Haiku 5.5",
+    detail: "Cheapest and fastest. Follow-ups come out more generic. $0.10 / $0.50.",
   },
 ];
 
@@ -33,7 +46,7 @@ function Settings() {
     staleTime: 60_000,
   });
   const saved = summary.data?.settings;
-  const [model, setModel] = useState<AiModel>("claude-sonnet-5");
+  const [model, setModel] = useState<AiModel>("claude-sonnet-5-5");
   const [context, setContext] = useState("");
   const [offer, setOffer] = useState("");
   const [script, setScript] = useState("");

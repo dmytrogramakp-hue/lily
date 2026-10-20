@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCampaigns, unwrap } from "@/lib/api";
 import { useCurrentUser, useTeam } from "@/lib/current-user";
+import { PendingInvitesBanner } from "@/components/lily/PendingInvites";
 import type { TeamMember } from "@/lib/types";
 import {
   Check,
@@ -42,7 +43,14 @@ export function AppShell({
     staleTime: 60_000,
   });
   const { user } = useCurrentUser();
-  const limit = summary.data?.settings.daily_invite_limit;
+  const teamLimit = summary.data?.settings.daily_invite_limit;
+  // A person with their own daily limit (for example while ramping up a new account) sees theirs.
+  const limit =
+    teamLimit === undefined
+      ? undefined
+      : typeof user?.daily_invite_limit === "number"
+        ? user.daily_invite_limit
+        : teamLimit;
   const defaultAccount = summary.data?.default_account;
   // The card shows the LinkedIn of whoever is using Lily; the daily limit applies per account.
   const myAccount = user?.unipile_account_id || null;
@@ -140,7 +148,10 @@ export function AppShell({
           </div>
           {actions && <div className="flex gap-2">{actions}</div>}
         </div>
-        <div className="flex-1 px-8 pb-10">{children}</div>
+        <div className="flex-1 px-8 pb-10">
+          <PendingInvitesBanner />
+          {children}
+        </div>
       </main>
       <WhoIsUsingLily />
     </div>

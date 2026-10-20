@@ -151,7 +151,9 @@ export const setSendingSettings = createServerFn({ method: "POST" })
       company_context: z.string().max(4000).optional(),
       offer: z.string().max(1500).optional(),
       first_message_script: z.string().max(600).optional(),
-      ai_model: z.enum(["claude-sonnet-5", "claude-opus-5"]).optional(),
+      ai_model: z
+        .enum(["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5", "claude-fable-5-1"])
+        .optional(),
     }),
   )
   .handler(({ data }) =>
@@ -179,6 +181,8 @@ export const saveTeamMember = createServerFn({ method: "POST" })
         z.literal(""),
         z.string().trim().url().startsWith("https://").max(300),
       ]),
+      /** null = use the team default. */
+      daily_invite_limit: z.number().int().min(0).max(100).nullable().optional(),
     }),
   )
   .handler(({ data }) =>

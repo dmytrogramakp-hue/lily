@@ -25,6 +25,7 @@ import {
 } from "@/components/lily/AppShell";
 import { useCurrentUser, useTeam } from "@/lib/current-user";
 import { SendingCard } from "@/components/lily/SendingCard";
+import { PendingInvitesPanel } from "@/components/lily/PendingInvites";
 import { DeleteCampaignDialog } from "@/components/lily/DeleteCampaignDialog";
 import type { Campaign } from "@/lib/types";
 import { getCampaigns, unwrap, updateCampaign } from "@/lib/api";
@@ -135,6 +136,7 @@ function Campaigns() {
       )}
 
       <SendingCard summary={data} />
+      <PendingInvitesPanel className="mb-6" />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (

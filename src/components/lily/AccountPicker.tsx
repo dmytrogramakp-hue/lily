@@ -8,7 +8,7 @@ import type { TeamMember } from "@/lib/types";
  * Whose LinkedIn a page shows (Inbox, Invites). Defaults to the person using Lily when they
  * have a LinkedIn connected, otherwise Dima's account. Anyone can switch to a teammate's.
  */
-export function useAccountChoice() {
+export function useAccountChoice(initialMember?: string) {
   const { user } = useCurrentUser();
   const { members } = useTeam();
   const summary = useQuery({
@@ -22,9 +22,9 @@ export function useAccountChoice() {
     withLinkedIn.find((m) => m.unipile_account_id === summary.data?.default_account) ??
     withLinkedIn[0] ??
     null;
-  const [picked, setPicked] = useState<string | null>(null);
-  // Follow the person using Lily until someone picks an account explicitly.
-  useEffect(() => setPicked(null), [user?.key]);
+  const [picked, setPicked] = useState<string | null>(initialMember ?? null);
+  // Follow the person using Lily until someone picks an account explicitly (or a link names one).
+  useEffect(() => setPicked(initialMember ?? null), [user?.key, initialMember]);
   const member: TeamMember | null =
     (picked ? withLinkedIn.find((m) => m.key === picked) : null) ?? fallback;
   return {
