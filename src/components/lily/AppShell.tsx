@@ -48,9 +48,11 @@ export function AppShell({
   const limit =
     teamLimit === undefined
       ? undefined
-      : typeof user?.daily_invite_limit === "number"
-        ? user.daily_invite_limit
-        : teamLimit;
+      : typeof user?.invite_limit_today === "number"
+        ? user.invite_limit_today
+        : typeof user?.daily_invite_limit === "number"
+          ? user.daily_invite_limit
+          : teamLimit;
   const defaultAccount = summary.data?.default_account;
   // The card shows the LinkedIn of whoever is using Lily; the daily limit applies per account.
   const myAccount = user?.unipile_account_id || null;

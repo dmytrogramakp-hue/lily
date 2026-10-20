@@ -84,6 +84,12 @@ export type TeamMember = {
   calendar_link?: string;
   /** Invites per day from this person's LinkedIn. null = the team default. */
   daily_invite_limit?: number | null;
+  /** The limit the invite sender uses today: ramp step, own limit or team default. */
+  invite_limit_today?: number;
+  invite_limit_source?: "ramp" | "own" | "team";
+  /** Dated ramp steps (Madrid dates), set by Dima in lily_settings invite_ramp. */
+  invite_ramp?: { from: string; limit: number }[];
+  invite_ramp_next?: { from: string; limit: number } | null;
 };
 
 /** Pending (sent, not yet accepted) LinkedIn invites for one account, refreshed hourly on weekdays. */

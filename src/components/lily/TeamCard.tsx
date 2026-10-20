@@ -206,7 +206,7 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
               </div>
               {m.unipile_account_id && (
                 <div className="ml-11 mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                  <span>{limitText(m.daily_invite_limit, teamLimit)}</span>
+                  <span>{limitText(m, teamLimit)}</span>
                   {(() => {
                     const p = pendingByAccount.get(m.unipile_account_id);
                     if (!p) return null;
@@ -297,8 +297,8 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             The calendar link fills {"{{calendar_link}}"} in this person's template messages. The
-            role is how Claude introduces them. Leave invites per day empty to use the team default;
-            use a lower number for the first weeks on a newly connected account.
+            role is how Claude introduces them. Leave invites per day empty to use the team default.
+            A ramp schedule, when one is set for this person, takes priority over this number.
           </p>
           <div className="mt-4 flex items-center gap-2">
             <Btn
@@ -332,10 +332,24 @@ export function TeamCard({ campaigns }: { campaigns: Campaign[] }) {
   );
 }
 
-function draftLimitText(own: number | null | undefined, teamLimit: number) {
-  return own === null || own === undefined
-    ? `${teamLimit} invites a day (team default)`
-    : `${own} invites a day (own limit)`;
+function draftLimitText(member: TeamMember, teamLimit: number) {
+  const day = (iso: string) =>
+    new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  const today = member.invite_limit_today;
+  const next = member.invite_ramp_next;
+  if (member.invite_limit_source === "ramp" && typeof today === "number") {
+    return `${today} invites a day today (ramp)${next ? `, ${next.limit} from ${day(next.from)}` : ""}`;
+  }
+  const own = member.daily_invite_limit;
+  const base =
+    own === null || own === undefined
+      ? `${teamLimit} invites a day (team default)`
+      : `${own} invites a day (own limit)`;
+  return next ? `${base}, ramp starts ${day(next.from)} at ${next.limit}` : base;
 }
 
 function LinkedInRow({
