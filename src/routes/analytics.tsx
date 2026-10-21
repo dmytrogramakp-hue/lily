@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, Card, ErrorBanner, Loading, StatusPill } from "@/components/lily/AppShell";
 import { getCampaigns, unwrap } from "@/lib/api";
+import { TrialPushTracker } from "@/components/lily/TrialPushTracker";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -61,6 +62,7 @@ function Analytics() {
         </Card>
       ) : (
         <>
+          {d?.trial_push && <TrialPushTracker t={d.trial_push} />}
           <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
             <Card className="p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">

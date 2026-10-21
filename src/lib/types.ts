@@ -56,6 +56,8 @@ export type CampaignSummary = {
     tracker_to: string | null;
   };
   daily: DailyActivity[];
+  /** The current outreach push measured against its targets. Absent when no push is configured. */
+  trial_push?: TrialPush | null;
   settings: SendingSettings;
   /** Everyone who can be picked as "who is using Lily" and assigned as a campaign owner. */
   users?: TeamMember[];
@@ -203,6 +205,42 @@ export type ConversationSummary = {
   last_text: string;
   last_at: string | null;
   last_from_me: boolean | null;
+};
+
+export type TrialPush = {
+  name: string;
+  start: string;
+  end: string;
+  days: { total: number; elapsed: number; working_total: number; working_elapsed: number };
+  targets: {
+    invites: number;
+    connections: [number, number];
+    replies: [number, number];
+    signups: [number, number];
+  };
+  /** What the ramp schedule says should have happened by now. */
+  expected_today: {
+    invites: number;
+    connections: [number, number];
+    replies: [number, number];
+    signups: [number, number];
+  };
+  actual: {
+    invites: number;
+    connections: number;
+    replies: number;
+    signups: number;
+    keys_used: number;
+    signups_updated_at: string | null;
+  };
+  per_sender: {
+    key: string;
+    name: string;
+    invites: number;
+    expected_invites: number;
+    connections: number;
+    replies: number;
+  }[];
 };
 
 export type ChatMessage = { id: string; text: string; at: string | null; from_me: boolean };
