@@ -16,7 +16,10 @@ const fmt = (n: number) => n.toLocaleString();
 const range = (r: [number, number]) => (r[0] === r[1] ? fmt(r[0]) : `${fmt(r[0])} to ${fmt(r[1])}`);
 
 function pace(actual: number, expected: [number, number]) {
-  if (expected[0] <= 0) return { label: "Not started", tone: "bg-muted text-muted-foreground" };
+  if (expected[0] <= 0)
+    return actual > 0
+      ? { label: "Ahead", tone: "bg-success-soft text-success" }
+      : { label: "Not started", tone: "bg-muted text-muted-foreground" };
   if (actual >= expected[1]) return { label: "Ahead", tone: "bg-success-soft text-success" };
   if (actual >= expected[0] * 0.9)
     return { label: "On pace", tone: "bg-primary-soft text-primary" };
