@@ -17,7 +17,18 @@ import { getInbox, getThread, sendMessage, triageThread, unwrap } from "@/lib/ap
 import type { TriageLabel, TriageResult } from "@/lib/types";
 import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
 
+type InboxSearch = { member?: string; chat?: string };
+
 export const Route = createFileRoute("/inbox")({
+  // Deep links from Slack reply alerts: /inbox?member=bohdan&chat=<chat id>
+  validateSearch: (s: Record<string, unknown>): InboxSearch => {
+    const member = s["member"];
+    const chat = s["chat"];
+    return {
+      ...(typeof member === "string" && /^[a-z0-9-]{1,60}$/.test(member) ? { member } : {}),
+      ...(typeof chat === "string" && /^[A-Za-z0-9_-]{4,80}$/.test(chat) ? { chat } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Inbox · Lily" },
@@ -77,9 +88,10 @@ function Inbox() {
   const [triaging, setTriaging] = useState<Record<string, boolean>>({});
   const inFlight = useRef(new Set<string>());
   const bottom = useRef<HTMLDivElement>(null);
-  const choice = useAccountChoice();
+  const search = Route.useSearch();
+  const choice = useAccountChoice(search.member);
   const account = choice.account;
-  useEffect(() => setActive(null), [account]);
+  useEffect(() => setActive(search.chat ?? null), [account]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const inbox = useQuery({
     queryKey: ["inbox", account],
