@@ -16,12 +16,14 @@ import {
   Settings,
   AlertTriangle,
   Loader2,
+  CalendarClock,
 } from "lucide-react";
 
 const nav = [
   { to: "/", label: "Campaigns", icon: LayoutGrid },
   { to: "/invites", label: "Invites", icon: UserPlus },
   { to: "/inbox", label: "Inbox", icon: MessagesSquare },
+  { to: "/follow-ups", label: "Follow-ups", icon: CalendarClock },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;

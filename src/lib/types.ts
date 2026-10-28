@@ -243,6 +243,27 @@ export type TrialPush = {
   }[];
 };
 
+/** Someone who said "later": write to them again on due_on, by hand. */
+export type FollowUp = {
+  id: number;
+  lead_key: string;
+  person_name: string;
+  headline: string;
+  company: string;
+  campaign: string;
+  member_key: string;
+  account_id: string;
+  chat_id: string;
+  profile_url: string;
+  due_on: string;
+  reason: string;
+  status: "open" | "done";
+  source: "alert" | "manual";
+  note: string;
+  done_at: string;
+  created_at: string;
+};
+
 export type ChatMessage = { id: string; text: string; at: string | null; from_me: boolean };
 
 /** How Claude read the latest message from the other person in a thread. */

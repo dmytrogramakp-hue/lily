@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, RefreshCw, Send } from "lucide-react";
+import { CalendarClock, ExternalLink, RefreshCw, Send } from "lucide-react";
 import {
   AppShell,
   Card,
@@ -13,7 +13,7 @@ import {
   initialsOf,
   timeAgo,
 } from "@/components/lily/AppShell";
-import { getInbox, getThread, sendMessage, triageThread, unwrap } from "@/lib/api";
+import { createFollowUp, getInbox, getThread, sendMessage, triageThread, unwrap } from "@/lib/api";
 import type { TriageLabel, TriageResult } from "@/lib/types";
 import { AccountPicker, useAccountChoice } from "@/components/lily/AccountPicker";
 
@@ -85,6 +85,13 @@ function Inbox() {
   const [active, setActive] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [triage, setTriage] = useState<Record<string, Cached>>(() => readTriageCache());
+  // "Follow up later": a reminder in Follow-ups for this thread, default two weeks out.
+  const [followOpen, setFollowOpen] = useState(false);
+  const [followDate, setFollowDate] = useState(() =>
+    new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+  );
+  const [followNote, setFollowNote] = useState("");
+  const [followSaved, setFollowSaved] = useState<string | null>(null);
   const [triaging, setTriaging] = useState<Record<string, boolean>>({});
   const inFlight = useRef(new Set<string>());
   const bottom = useRef<HTMLDivElement>(null);
@@ -210,6 +217,30 @@ function Inbox() {
   };
 
   const person = thread.data?.person ?? summary?.person ?? null;
+  const follow = useMutation({
+    mutationFn: () =>
+      unwrap(
+        createFollowUp({
+          data: {
+            person_name: person?.name ?? "LinkedIn member",
+            ...(person?.headline ? { headline: person.headline } : {}),
+            ...(person?.profile_url ? { profile_url: person.profile_url } : {}),
+            ...(choice.member ? { member_key: choice.member.key } : {}),
+            ...(account ? { account_id: account } : {}),
+            ...(activeId ? { chat_id: activeId } : {}),
+            due_on: followDate,
+            ...(followNote.trim() ? { note: followNote.trim() } : {}),
+            reason: summary?.last_from_me === false ? summary.last_text.slice(0, 300) : "",
+          },
+        }),
+      ),
+    onSuccess: () => {
+      setFollowSaved(followDate);
+      setFollowOpen(false);
+      setFollowNote("");
+      qc.invalidateQueries({ queryKey: ["followups"] });
+    },
+  });
 
   return (
     <AppShell
@@ -336,7 +367,43 @@ function Inbox() {
                     Profile <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowSaved(null);
+                    setFollowOpen((v) => !v);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium hover:bg-muted"
+                >
+                  <CalendarClock className="h-3.5 w-3.5" /> Follow up later
+                </button>
               </div>
+              {followOpen && (
+                <div className="flex flex-wrap items-center gap-2 border-b bg-primary-soft px-5 py-2 text-sm">
+                  <span className="text-xs text-muted-foreground">Remind on</span>
+                  <input
+                    type="date"
+                    value={followDate}
+                    onChange={(e) => setFollowDate(e.target.value)}
+                    className="rounded-lg border bg-card px-2 py-1 text-sm"
+                  />
+                  <input
+                    value={followNote}
+                    onChange={(e) => setFollowNote(e.target.value)}
+                    placeholder="Note, optional"
+                    className="min-w-0 flex-1 rounded-lg border bg-card px-2 py-1 text-sm"
+                  />
+                  <Btn onClick={() => follow.mutate()} disabled={follow.isPending || !followDate}>
+                    Save
+                  </Btn>
+                  {follow.error && <ErrorBanner error={follow.error} />}
+                </div>
+              )}
+              {followSaved && (
+                <div className="border-b bg-success-soft px-5 py-1.5 text-xs text-success">
+                  Follow-up saved for {followSaved}. It is listed under Follow-ups.
+                </div>
+              )}
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-background p-5">
                 {thread.isLoading ? (
                   <Loading label="Loading messages" />

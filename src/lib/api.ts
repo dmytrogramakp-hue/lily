@@ -22,6 +22,7 @@ import type {
   UploadResult,
   TriageLabel,
   TriageResult,
+  FollowUp,
 } from "./types";
 
 /* ---------------------------------------------------------------- result envelope */
@@ -381,6 +382,63 @@ export const sendMessage = createServerFn({ method: "POST" })
       );
       return { ok: true, message_id: res.message_id ?? null };
     }),
+  );
+
+/* ---------------------------------------------------------------- follow-ups */
+
+const dayStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const getFollowUps = createServerFn({ method: "GET" }).handler(() =>
+  guard(async () =>
+    n8n<{ ok: boolean; followups: FollowUp[] }>("lily-followups", {
+      method: "POST",
+      json: { action: "list" },
+    }),
+  ),
+);
+
+export const createFollowUp = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      lead_key: z.string().max(120).optional(),
+      person_name: z.string().trim().min(1).max(120),
+      headline: z.string().max(300).optional(),
+      company: z.string().max(160).optional(),
+      campaign: z.string().max(120).optional(),
+      member_key: z.string().max(60).optional(),
+      account_id: accountSchema,
+      chat_id: z.string().max(200).optional(),
+      profile_url: z.string().max(400).optional(),
+      due_on: dayStr,
+      reason: z.string().max(600).optional(),
+      note: z.string().max(600).optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () =>
+      n8n<{ ok: boolean }>("lily-followups", {
+        method: "POST",
+        json: { action: "create", followup: { ...data, source: "manual" } },
+      }),
+    ),
+  );
+
+export const updateFollowUp = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      id: z.number().int().min(1),
+      status: z.enum(["open", "done"]).optional(),
+      due_on: dayStr.optional(),
+      note: z.string().max(600).optional(),
+    }),
+  )
+  .handler(({ data }) =>
+    guard(async () =>
+      n8n<{ ok: boolean }>("lily-followups", {
+        method: "POST",
+        json: { action: "update", ...data },
+      }),
+    ),
   );
 
 /* ---------------------------------------------------------------- invitations */
