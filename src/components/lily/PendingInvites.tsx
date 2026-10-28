@@ -8,7 +8,9 @@ import { useTeam } from "@/lib/current-user";
 import type { PendingInviteStats, TeamMember } from "@/lib/types";
 
 /** Alert thresholds for pending (sent, not accepted) invites per LinkedIn account. */
-export const PENDING_THRESHOLDS = [300, 400, 500] as const;
+export const PENDING_THRESHOLDS = [800] as const;
+/** Scale of the bar: the ceiling sits at 80% so an account over it is visibly in the red. */
+const BAR_MAX = 1000;
 
 export type PendingRow = {
   account: string;
@@ -17,26 +19,12 @@ export type PendingRow = {
 };
 
 export function levelTone(level: number) {
-  if (level >= 500)
+  if (level >= 800)
     return {
       bar: "bg-destructive",
       text: "text-destructive",
       chip: "bg-destructive-soft text-destructive",
-      label: "Over 500",
-    };
-  if (level >= 400)
-    return {
-      bar: "bg-warning",
-      text: "text-warning",
-      chip: "bg-warning-soft text-warning",
-      label: "Over 400",
-    };
-  if (level >= 300)
-    return {
-      bar: "bg-warning",
-      text: "text-warning",
-      chip: "bg-warning-soft text-warning",
-      label: "Over 300",
+      label: "Over 800",
     };
   return {
     bar: "bg-primary",
@@ -72,7 +60,7 @@ export function usePendingInvites() {
   return { rows, alerts, checkedAt: data?.checked_at ?? null, loaded: !!summary.data };
 }
 
-/** Per-person pending invite counts with the 300 / 400 / 500 thresholds and a clean-up link. */
+/** Per-person pending invite counts against the 800 ceiling, with a clean-up link. */
 export function PendingInvitesPanel({ className = "" }: { className?: string }) {
   const { rows, checkedAt, loaded } = usePendingInvites();
   if (!loaded) return null;
@@ -82,8 +70,8 @@ export function PendingInvitesPanel({ className = "" }: { className?: string }) 
         <div>
           <div className="font-semibold text-ink">Pending invites per LinkedIn</div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Sent but not accepted yet. Keep each account under 300 by withdrawing invites older than
-            3 weeks. Alerts go to Slack at 300, 400 and 500.
+            Sent but not accepted yet. The ceiling is 800 per account; a Slack alert goes out when
+            an account reaches it. Withdraw invites older than 3 weeks to stay well below.
           </p>
         </div>
         {checkedAt && (
@@ -100,7 +88,7 @@ export function PendingInvitesPanel({ className = "" }: { className?: string }) 
         <ul className="mt-4 space-y-3">
           {rows.map((r) => {
             const tone = levelTone(r.stats.level);
-            const pct = Math.min(100, (r.stats.count / 500) * 100);
+            const pct = Math.min(100, (r.stats.count / BAR_MAX) * 100);
             const name = r.member?.name ?? r.stats.member_name;
             return (
               <li
@@ -140,7 +128,7 @@ export function PendingInvitesPanel({ className = "" }: { className?: string }) 
                       <span
                         key={t}
                         className="absolute top-0 h-full w-px bg-ink/25"
-                        style={{ left: `${(t / 500) * 100}%` }}
+                        style={{ left: `${(t / BAR_MAX) * 100}%` }}
                         aria-hidden
                       />
                     ))}
@@ -162,7 +150,7 @@ export function PendingInvitesPanel({ className = "" }: { className?: string }) 
   );
 }
 
-/** Banner shown on every page while any account is at or above 300 pending invites. */
+/** Banner shown on every page while any account is at or above 800 pending invites. */
 export function PendingInvitesBanner() {
   const { alerts } = usePendingInvites();
   if (alerts.length === 0) return null;
@@ -171,7 +159,7 @@ export function PendingInvitesBanner() {
   return (
     <div
       role="alert"
-      className={`mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-3 text-sm ${worst.stats.level >= 500 ? "border-destructive/30 bg-destructive-soft text-destructive" : "border-warning/30 bg-warning-soft text-warning"}`}
+      className={`mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-3 text-sm ${worst.stats.level >= 800 ? "border-destructive/30 bg-destructive-soft text-destructive" : "border-warning/30 bg-warning-soft text-warning"}`}
     >
       <AlertTriangle className="h-4 w-4 shrink-0" />
       <span className="font-semibold">Too many pending LinkedIn invites.</span>
