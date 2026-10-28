@@ -19,7 +19,8 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
                                               ├─ n8n data table "lily_settings"                         (daily_invite_limit, send_weekends)
                                               ├─ n8n data table "lily_lead_progress"                    (per lead: accepted, messages sent, replies)
                                               ├─ n8n data table "lily_users"                            (team + each person's Unipile LinkedIn account, calendar link)
-                                              └─ n8n data table "lily_invite_log"                       (which LinkedIn account sent each invite)
+                                              ├─ n8n data table "lily_invite_log"                       (which LinkedIn account sent each invite)
+                                              └─ n8n data table "lily_followups"                        (people who said later, with a due date)
 ```
 - Server functions never throw across the boundary. They return `Result<T>`; the client calls `unwrap()`. Thrown errors from server fns did not reach the client in this TanStack version.
 - All keys stay server-side. `src/lib/server/env.ts` reads `.env.local` in dev because Vite does not expose non-`VITE_` vars to `process.env`.
@@ -28,7 +29,7 @@ Browser ──server fns (src/lib/api.ts)──▶ Unipile API          (inbox, 
 ## n8n workflows (newscatcher.app.n8n.cloud, CatchAll project, folder Sales Automation)
 | Workflow | Id | Role |
 |---|---|---|
-| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status` (create, status, sequence), `lily-campaign-leads`, `lily-settings`. Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
+| Lily - API | v0UKQJZ7ljJSo3UB | Webhooks `lily-upload`, `lily-campaigns`, `lily-campaign-status` (create, status, sequence, delete, and `{ stop_leads: [lead_key...], note }` to stop individual sequences), `lily-campaign-leads`, `lily-settings`, `lily-followups` (`action: list | create | update`). Guarded by `x-lily-key` header = `LILY_N8N_SECRET`. |
 | LinkedIn - Campaign Messages | I4a0XgRsdByYz8iH | Hourly 9:20 to 17:20 Madrid, weekdays unless `send_weekends`. Reads new connections from Unipile `/users/relations`, records each accepted lead of an active campaign in `lily_lead_progress` (key = LinkedIn public id), and sends the campaign's message steps. Message 1 is due `wait_days` calendar days after the acceptance date, each later message `wait_days` after the previous one. Any reply from the lead stops the sequence. AI steps call Lily - AI Writer as a sub-workflow; tone-check failures go to `needs_review` with the draft in `note`. Caps: 24 sends per run in total across accounts (so a run ends inside the hour), 60 per account per day, 30 to 90 s between sends. Guards added 2026-10-26 after hourly runs overlapped and sent 44 people the same message twice: a run lock in `lily_settings` key `messages_run` (`{started_at, execution_id}` set after planning, `{finished_at}` when the loop ends, 58 minute TTL, a new run exits while the previous one is still sending), a fresh read of the lead row right before each send ("Fresh Progress" and "Still Due?", skipped if the step was already sent), and progress saved immediately after sending ("Save Sent") before the random wait. |
 | LinkedIn Drip v2 - Message 1 / 2 | vlhdApprJVEOwNe7 / muc4p1HwTOQGq6Ib | Old, unpublished. Replaced by Campaign Messages. |
 | LinkedIn - Send Invites v2 | kUijiwRnqELRkEQt | Hourly 9:05 to 17:05 Madrid. Sends exactly `daily_invite_limit` per day (from `lily_settings`), spread over the remaining runs, max 10 per run, only to `active` campaigns. Marks unreachable and failed leads. |
@@ -54,6 +55,10 @@ Excluded companies: `lily_settings` key `excluded_companies` (JSON array of comp
 
 Trial push tracker: `lily_settings` key `trial_push` `{name, start, end, campaigns_since, targets: {invites, connections: [lo, hi], replies: [lo, hi], signups: [lo, hi]}}` and `trial_push_signups` `{count, keys_used, updated_at, matches}` (written daily by `Newscatcher/trial-desk/linkedin-desk.py`). The summary returns `trial_push` with expected-by-today figures from the ramp schedule (weekdays since each sender connected LinkedIn, today counted after 18:00), actuals from campaigns created since `campaigns_since`, and a per-sender table; `TrialPushTracker` on Analytics shows ahead, on pace or behind.
 
+Follow-ups: `lily_followups` (FjlhfA9ZWthJ565N) holds one row per person to write to again (`person_name, headline, company, campaign, member_key, account_id, chat_id, profile_url, due_on, reason, status open|done, source alert|manual, note, done_at, created_at`). Reply Alerts creates one for every `later` reply, due in the days the triage suggests (`follow_up_days`, 7 to 60, default 14); the Inbox "Follow up later" button creates one by hand. `/follow-ups` groups open ones into Overdue, Due today, This week and Later, with Open thread, a date picker, +1 week and Done; `create` on an existing open row for the same lead updates it instead. The morning desk lists the ones due today.
+
+Cadence since 2026-10-28: every campaign sends messages on days 1, 3 and 5 after acceptance (`wait_days` 1, 2, 2).
+
 Campaign rules: statuses are draft, active, paused, archived (plus legacy for queue rows with no campaign row). A campaign row with no status shows as draft. Only `active` campaigns are invited. Old rows without `campaign_name` show as "Legacy queue" and cannot run a sequence.
 
 Sequence JSON (column `sequence` in `lily_campaigns`): `{ version: 1, preset, steps: [{ type: "invite", note }, { type: "message", wait_days, mode: "ai" | "template", text }...] }`, max 3 messages. The invite sender fills the invite note per lead from the live LinkedIn profile (first and last name, current role company and title), falling back to the CSV, and sends without a note if a used value is missing. Message steps are sent by LinkedIn - Campaign Messages. Lead stages in `lily-campaign-leads` come from `lily_lead_progress` (queued, invited, connected, message_1..3, replied, needs_review, stopped, skipped) with the next scheduled message date; leads from before Lily fall back to the old tracker matched by name.
@@ -66,7 +71,8 @@ Sequence JSON (column `sequence` in `lily_campaigns`): `{ version: 1, preset, st
 | `/campaigns/$name` | Setup checklist, launch / pause / resume / archive. Tabs: Overview (KPIs, funnel, sequence summary), Leads (CSV upload into this campaign, lead table with stage filters and search via `lily-campaign-leads`), Sequence (presets, invite note with Draft with AI, message steps: AI mode with per-lead preview showing Claude's profile analysis, or template mode with Draft with AI and placeholders) |
 | `/invites` | Unipile received (accept / ignore) and sent (withdraw). Outgoing tab has bulk withdraw. |
 | `/inbox` | Unipile chats, thread view, send reply |
-| `/analytics` | 14-day activity, funnel, per-campaign table |
+| `/follow-ups` | People who said later, grouped by due date, with Open thread, date change, +1 week and Done |
+| `/analytics` | Trial push tracker, 14-day activity, funnel, per-campaign table |
 | `/settings` | Team and LinkedIn accounts (per-person invites per day, calendar link), Claude connection test, model (Opus 5.5, Sonnet 5.5, Fable 5.1, Haiku 5.5), first message script, "What NewsCatcher does" context, current offer |
 
 ## Run
